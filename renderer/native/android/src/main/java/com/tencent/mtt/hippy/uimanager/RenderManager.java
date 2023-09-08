@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import android.text.TextUtils;
@@ -58,11 +59,12 @@ import java.util.Objects;
 public class RenderManager {
 
     private static final String TAG = "RenderManager";
+    private static final int INITIAL_UPDATE_NODE_SIZE = 1 << 9;
     private boolean isBatching = false;
     @NonNull
     private final ControllerManager mControllerManager;
     @NonNull
-    private final Map<Integer, List<RenderNode>> mUIUpdateNodes = new HashMap<>();
+    private final Map<Integer, LinkedHashSet<RenderNode>> mUIUpdateNodes = new HashMap<>();
 
     public RenderManager(Renderer renderer) {
         mControllerManager = new ControllerManager(renderer);
@@ -96,7 +98,7 @@ public class RenderManager {
     public void preCreateView(int rootId, int id, int pid, @NonNull String className,
             @Nullable Map<String, Object> props) {
         boolean isLazy = mControllerManager.checkLazy(className);
-        if (isLazy) {
+        if (isLazy || id == rootId) {
             return;
         }
         if (pid != rootId) {
@@ -166,12 +168,12 @@ public class RenderManager {
     }
 
     public void addUpdateNodeIfNeeded(int rootId, RenderNode node) {
-        List<RenderNode> updateNodes = mUIUpdateNodes.get(rootId);
+        LinkedHashSet<RenderNode> updateNodes = mUIUpdateNodes.get(rootId);
         if (updateNodes == null) {
-            updateNodes = new ArrayList<>();
+            updateNodes = new LinkedHashSet<>(INITIAL_UPDATE_NODE_SIZE);
             updateNodes.add(node);
             mUIUpdateNodes.put(rootId, updateNodes);
-        } else if (!updateNodes.contains(node)) {
+        } else {
             updateNodes.add(node);
         }
     }
@@ -321,6 +323,14 @@ public class RenderManager {
         deleteSelfFromParent(rootId, node);
     }
 
+    public void deleteSnapshotNode(int rootId) {
+        RootRenderNode rootNode = NativeRendererManager.getRootNode(rootId);
+        if (rootNode != null) {
+            deleteSelfFromParent(rootId, rootNode);
+            rootNode.clear();
+        }
+    }
+
     public void dispatchUIFunction(int rootId, int nodeId, @NonNull String functionName,
             @NonNull List<Object> params, @Nullable Promise promise) {
         RenderNode node = getRenderNode(rootId, nodeId);
@@ -336,7 +346,7 @@ public class RenderManager {
     }
 
     public void batch(int rootId) {
-        List<RenderNode> updateNodes = mUIUpdateNodes.get(rootId);
+        LinkedHashSet<RenderNode> updateNodes = mUIUpdateNodes.get(rootId);
         if (updateNodes == null) {
             return;
         }
@@ -416,6 +426,9 @@ public class RenderManager {
     }
 
     public void postInvalidateDelayed(int rootId, int id, long delayMilliseconds) {
-        mControllerManager.postInvalidateDelayed(rootId, id, delayMilliseconds);
+        RenderNode node = getRenderNode(rootId, id);
+        if (node != null) {
+            node.postInvalidateDelayed(delayMilliseconds);
+        }
     }
 }

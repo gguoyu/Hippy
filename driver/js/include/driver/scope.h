@@ -119,6 +119,7 @@ struct ClassTemplate {
   string_view name;
   size_t size = SIZE_OF<T>;
   std::unordered_map<void*, std::shared_ptr<T>> holder_map;
+  std::vector<std::shared_ptr<CtxValue>> holder_ctx_values;
 };
 
 class Scope : public std::enable_shared_from_this<Scope> {
@@ -240,6 +241,8 @@ class Scope : public std::enable_shared_from_this<Scope> {
   hippy::dom::EventListenerInfo RemoveListener(const EventListenerInfo& event_listener_info);
   bool HasListener(const EventListenerInfo& event_listener_info);
   uint64_t GetListenerId(const EventListenerInfo& event_listener_info);
+  inline void SetCurrentEvent(std::any current_event) { current_event_ = current_event; }
+  inline std::any GetCurrentEvent() { return current_event_; }
 
   void RunJS(const string_view& js,
              const string_view& uri,
@@ -272,22 +275,7 @@ class Scope : public std::enable_shared_from_this<Scope> {
 
   inline void SetUriLoader(std::weak_ptr<UriLoader> loader) {
     loader_ = loader;
-    auto the_loader = loader_.lock();
-    if (the_loader) {
-      the_loader->SetRequestTimePerformanceCallback([WEAK_THIS](const string_view& uri, const TimePoint& start, const TimePoint& end) {
-        DEFINE_AND_CHECK_SELF(Scope)
-        auto runner = self->GetTaskRunner();
-        if (runner) {
-          auto task = [weak_this, uri, start, end]() {
-            DEFINE_AND_CHECK_SELF(Scope)
-            auto entry = self->GetPerformance()->PerformanceResource(uri);
-            entry->SetLoadSourceStart(start);
-            entry->SetLoadSourceEnd(end);
-          };
-          runner->PostTask(std::move(task));
-        }
-      });
-    }
+    SetCallbackForUriLoader();
   }
 
   inline std::weak_ptr<UriLoader> GetUriLoader() { return loader_; }
@@ -321,6 +309,8 @@ class Scope : public std::enable_shared_from_this<Scope> {
   inline std::shared_ptr<Performance> GetPerformance() {
     return performance_;
   }
+
+  void HandleUriLoaderError(const string_view& uri, const int32_t ret_code, const string_view& error_msg);
 
 #ifdef ENABLE_INSPECTOR
   inline void SetDevtoolsDataSource(std::shared_ptr<hippy::devtools::DevtoolsDataSource> devtools_data_source) {
@@ -370,7 +360,7 @@ class Scope : public std::enable_shared_from_this<Scope> {
       FOOTSTONE_CHECK(context);
       auto weak_callback_wrapper = std::make_unique<WeakCallbackWrapper>([](void* callback_data, void* internal_data) {
         auto class_template = reinterpret_cast<ClassTemplate<T>*>(callback_data);
-        auto holder_map = class_template->holder_map;
+        auto& holder_map = class_template->holder_map;
         auto it = holder_map.find(internal_data);
         if (it != holder_map.end()) {
           holder_map.erase(it);
@@ -467,6 +457,7 @@ class Scope : public std::enable_shared_from_this<Scope> {
   friend class Engine;
   void BindModule();
   void Bootstrap();
+  void SetCallbackForUriLoader();
 
  private:
   std::weak_ptr<Engine> engine_;
@@ -479,6 +470,7 @@ class Scope : public std::enable_shared_from_this<Scope> {
   std::unordered_map<uint32_t, std::shared_ptr<CtxValue>> call_ui_function_callback_holder_;
   std::unordered_map<uint32_t, std::unordered_map<std::string, std::unordered_map<uint64_t, std::shared_ptr<CtxValue>>>>
       bind_listener_map_; // bind js function and dom event listener id
+  std::any current_event_;
   std::unique_ptr<ScopeWrapper> wrapper_;
   std::weak_ptr<UriLoader> loader_;
   std::weak_ptr<DomManager> dom_manager_;

@@ -183,8 +183,6 @@ HP_EXTERN NSString *HippyBridgeModuleNameForClass(Class bridgeModuleClass);
                  args:(NSArray *)args
            completion:(dispatch_block_t _Nullable)completion;
 
-- (void)immediatelyCallTimer:(NSNumber *)timer;
-
 - (void)enqueueCallback:(NSNumber *)cbID args:(NSArray *)args;
 
 - (void)registerModuleForFrameUpdates:(id<HippyBridgeModule>)module withModuleData:(HippyModuleData *)moduleData;
@@ -284,6 +282,19 @@ HP_EXTERN NSString *HippyBridgeModuleNameForClass(Class bridgeModuleClass);
 - (void)setSnapShotData:(NSData *)data;
 
 @end
+
+
+@interface HippyBridge (RedBoxDebug)
+
+/// The last current active bridge instance.
++ (instancetype)currentBridge;
+
+/// Record the last active bridge instance.
+/// - Parameter currentBridge: bridge instance, pass nil to reset.
++ (void)setCurrentBridge:(nullable HippyBridge *)currentBridge;
+
+@end
+
 
 HP_EXTERN void HippyBridgeFatal(NSError *, HippyBridge *);
 

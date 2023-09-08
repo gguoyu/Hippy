@@ -103,13 +103,13 @@ std::shared_ptr<DomNode> DomNode::GetChildAt(size_t index) {
 }
 
 int32_t DomNode::AddChildByRefInfo(const std::shared_ptr<DomInfo>& dom_info) {
-  std::shared_ptr<RefInfo> ref_info = dom_info->ref_info;
+  std::shared_ptr<RefInfo>& ref_info = dom_info->ref_info;
   if (ref_info) {
     if (children_.size() == 0) {
        children_.push_back(dom_info->dom_node);
     } else {
       for (uint32_t i = 0; i < children_.size(); ++i) {
-        auto child = children_[i];
+        auto& child = children_[i];
         if (ref_info->ref_id == child->GetId()) {
           if (ref_info->relative_to_ref == RelativeType::kFront) {
             children_.insert(
@@ -145,7 +145,7 @@ int32_t DomNode::AddChildByRefInfo(const std::shared_ptr<DomInfo>& dom_info) {
 int32_t DomNode::GetChildIndex(uint32_t id) {
   int32_t index = -1;
   for (uint32_t i = 0; i < children_.size(); ++i) {
-    auto child = children_[i];
+    auto& child = children_[i];
     if (child && child->GetId() == id) {
       index = static_cast<int32_t>(i);
       break;
@@ -321,9 +321,9 @@ LayoutResult DomNode::GetLayoutInfoFromRoot() {
 
 void DomNode::TransferLayoutOutputsRecursive(std::vector<std::shared_ptr<DomNode>>& changed_nodes) {
   auto not_equal = std::not_equal_to<>();
-  bool changed = not_equal(layout_.left, layout_node_->GetLeft()) || not_equal(layout_.top, layout_node_->GetTop()) ||
-                 not_equal(layout_.width, layout_node_->GetWidth()) ||
-                 not_equal(layout_.height, layout_node_->GetHeight());
+  bool changed =  layout_node_->IsDirty() || layout_node_->HasNewLayout();
+  bool has_new_layout = layout_node_->HasNewLayout();
+
   layout_.left = layout_node_->GetLeft();
   layout_.top = layout_node_->GetTop();
   layout_.width = layout_node_->GetWidth();
@@ -365,19 +365,19 @@ void DomNode::TransferLayoutOutputsRecursive(std::vector<std::shared_ptr<DomNode
     layout_param[kLayoutHeightKey] = HippyValue(layout_.height);
     HippyValueObjectType layout_obj;
     layout_obj[kLayoutLayoutKey] = layout_param;
-    auto event =
-        std::make_shared<DomEvent>(kLayoutEvent,
-                                   weak_from_this(),
-                                   std::make_shared<HippyValue>(std::move(layout_obj)));
-    auto root = root_node_.lock();
-    if (root != nullptr) {
-      auto manager = root->GetDomManager().lock();
-      if (manager != nullptr) {
-        std::vector<std::function<void()>> ops = {[WEAK_THIS, event] {
-          DEFINE_AND_CHECK_SELF(DomNode)
-          self->HandleEvent(event);
-        }};
-        manager->PostTask(Scene(std::move(ops)));
+    if (has_new_layout) {
+      auto event = std::make_shared<DomEvent>(kLayoutEvent, weak_from_this(),
+                                              std::make_shared<HippyValue>(std::move(layout_obj)));
+      auto root = root_node_.lock();
+      if (root != nullptr) {
+        auto manager = root->GetDomManager().lock();
+        if (manager != nullptr) {
+          std::vector<std::function<void()>> ops = {[WEAK_THIS, event] {
+            DEFINE_AND_CHECK_SELF(DomNode)
+            self->HandleEvent(event);
+          }};
+          manager->PostTask(Scene(std::move(ops)));
+        }
       }
     }
   }
@@ -489,7 +489,7 @@ void DomNode::UpdateDiff(const std::unordered_map<std::string,
                          const std::unordered_map<std::string,
                                                   std::shared_ptr<HippyValue>>& update_dom_ext) {
   auto style_diff_value = DiffUtils::DiffProps(*this->GetStyleMap(), update_style);
-  auto ext_diff_value = DiffUtils::DiffProps(*this->GetStyleMap(), update_dom_ext);
+  auto ext_diff_value = DiffUtils::DiffProps(*this->GetExtStyle(), update_dom_ext);
   auto style_update = std::get<0>(style_diff_value);
   auto ext_update = std::get<0>(ext_diff_value);
   std::shared_ptr<DomValueMap> diff_value = std::make_shared<DomValueMap>();

@@ -364,7 +364,6 @@ using WeakCtxValuePtr = std::weak_ptr<hippy::napi::CtxValue>;
     return _enginekey ?: [NSString stringWithFormat:@"%p", self];
 }
 
-// clang-format off
 - (void)setContextName:(NSString *)contextName {
 #ifdef JS_JSC
     if (!contextName) {
@@ -410,7 +409,6 @@ using WeakCtxValuePtr = std::weak_ptr<hippy::napi::CtxValue>;
 #endif //defined(__IPHONE_16_4) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_4
 #endif //JS_JSC
 }
-// clang-format on
 
 - (void)dealloc {
     HPLogInfo(@"[Hippy_OC_Log][Life_Circle],HippyJSCExecutor dealloc %p", self);
@@ -535,7 +533,11 @@ using WeakCtxValuePtr = std::weak_ptr<hippy::napi::CtxValue>;
                 return;
             }
             NSError *error = nil;
+            auto entry = strongSelf.pScope->GetPerformance()->PerformanceNavigation("hippyInit");
+            string_view url = [[sourceURL absoluteString] UTF8String]?:"";
+            entry->BundleInfoOfUrl(url).execute_source_start_ = footstone::TimePoint::SystemNow();
             id result = executeApplicationScript(script, sourceURL, strongSelf.pScope->GetContext(), &error);
+            entry->BundleInfoOfUrl(url).execute_source_end_ = footstone::TimePoint::SystemNow();
             if (onComplete) {
                 onComplete(result, error);
             }

@@ -35,6 +35,7 @@
 #include "driver/modules/contextify_module.h"
 #include "driver/modules/console_module.h"
 #include "driver/modules/event_module.h"
+#include "driver/modules/animation_frame_module.h"
 #include "driver/modules/performance/performance_entry_module.h"
 #include "driver/modules/performance/performance_frame_timing_module.h"
 #include "driver/modules/performance/performance_mark_module.h"
@@ -196,6 +197,7 @@ void Scope::BindModule() {
   module_object_map_["TimerModule"] = std::make_shared<TimerModule>();
   module_object_map_["ContextifyModule"] = std::make_shared<ContextifyModule>();
   module_object_map_["UIManagerModule"] = std::make_shared<UIManagerModule>();
+  module_object_map_["AnimationFrameModule"] = std::make_shared<AnimationFrameModule>();
 #ifdef JS_V8
   module_object_map_["MemoryModule"] = std::make_shared<MemoryModule>();
 #endif
@@ -382,7 +384,7 @@ hippy::dom::EventListenerInfo Scope::AddListener(const EventListenerInfo& event_
     if (context) {
       auto callback = event_listener_info.callback.lock();
       if (callback == nullptr) return;
-      hippy::DomEventWrapper::Set(event);
+      scope->SetCurrentEvent(std::make_any<std::shared_ptr<hippy::dom::DomEvent>>(event));
       auto event_class = scope->GetJavascriptClass(kEventName);
       auto event_instance = context->NewInstance(event_class, 0, nullptr, nullptr);
       FOOTSTONE_DCHECK(callback) << "callback is nullptr";
@@ -525,7 +527,6 @@ void Scope::LoadInstance(const std::shared_ptr<HippyValue>& value) {
     DEFINE_AND_CHECK_SELF(Scope)
     // perfromance start time
     auto entry = self->GetPerformance()->PerformanceNavigation("hippyInit");
-    entry->SetHippyFirstFrameStart(footstone::TimePoint::SystemNow());
     entry->SetHippyRunApplicationStart(footstone::TimePoint::SystemNow());
 
     std::shared_ptr<Ctx> context = weak_context.lock();
@@ -596,6 +597,46 @@ void Scope::UnloadInstance(const std::shared_ptr<HippyValue>& value) {
     } else {
         runner->PostTask(std::move(cb));
     }
+}
+
+void Scope::SetCallbackForUriLoader() {
+  auto the_loader = loader_.lock();
+  if (the_loader) {
+    the_loader->SetRequestResultCallback([WEAK_THIS](const string_view& uri,
+        const TimePoint& start, const TimePoint& end,
+        const int32_t ret_code, const string_view& error_msg) {
+      DEFINE_AND_CHECK_SELF(Scope)
+      auto runner = self->GetTaskRunner();
+      if (runner) {
+        auto task = [weak_this, uri, start, end, ret_code, error_msg]() {
+          DEFINE_AND_CHECK_SELF(Scope)
+          auto entry = self->GetPerformance()->PerformanceResource(uri);
+          if (entry) {
+            entry->SetLoadSourceStart(start);
+            entry->SetLoadSourceEnd(end);
+          }
+          if (ret_code != 0) {
+            self->HandleUriLoaderError(uri, ret_code, error_msg);
+          }
+        };
+        runner->PostTask(std::move(task));
+      }
+    });
+  }
+}
+
+void Scope::HandleUriLoaderError(const string_view& uri, const int32_t ret_code, const string_view& error_msg) {
+  std::unordered_map<string_view, std::shared_ptr<CtxValue>> error_map;
+  error_map["code"] = context_->CreateNumber(static_cast<double>(ret_code));
+  error_map["message"] = context_->CreateString(error_msg);
+  auto event = context_->CreateString("vfs error");
+  auto source = context_->CreateString(uri);
+  auto lineno = context_->CreateNumber(0);
+  auto colno = context_->CreateNumber(0);
+  auto error = context_->CreateObject(error_map);
+  std::shared_ptr<CtxValue> arr[5] = {event, source, lineno, colno, error};
+  auto exception = context_->CreateArray(5, arr);
+  VM::HandleException(context_, "error", exception);
 }
 
 }
