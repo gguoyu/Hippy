@@ -20,9 +20,9 @@
 
 import { HippyTransferData } from './hippy-internal-types';
 
-export interface UIProps {
+export type UIProps = {
   [key: string]: any
-}
+};
 export type DefaultPropsProcess = (component: HippyBaseView, data: UIProps) => void;
 export interface HippyBaseView {
   tagName: InnerNodeTag|string;
@@ -43,6 +43,9 @@ export interface HippyBaseView {
   removeChild?: (child: HippyBaseView) => Promise<void>;
   destroy?: () => void;
   mounted?: () => void;
+  addEventListener?: (eventName: string, listener: HippyCallBack) => void;
+  removeEventListener?: (eventName: string) => void;
+  dispatchEvent?: (eventName: string, params: any) => void;
 }
 
 export type HippyBaseViewConstructor = new (context: ComponentContext, id, pId) => HippyBaseView;
@@ -92,3 +95,72 @@ export enum InnerNodeTag {
   MODAL = 'Modal',
   WEB_VIEW = 'WebView'
 }
+
+// event phase
+export const EventPhase = {
+  NONE: 0,
+  CAPTURING_PHASE: 1,
+  AT_TARGET: 2,
+  BUBBLING_PHASE: 3,
+};
+
+export type AnimationValue = number | { animationId: number | undefined } | string;
+export type AnimationCallback = () => void;
+export type AnimationDirection = 'left' | 'right' | 'top' | 'bottom' | 'center';
+export type AnimationMode = 'timing';
+export type AnimationValueType = 'deg' | 'rad' | 'color' | undefined;
+export type AnimationTimingFunction = 'linear' | 'ease' | 'bezier' | 'in' | 'ease-in' | 'out' | 'ease-out' | 'inOut' | 'ease-in-out' | (string & {});
+
+export interface AnimationOptions {
+  /**
+   * Initial value at `Animation` start
+   */
+  startValue?: AnimationValue;
+
+  /**
+   * End value when `Animation` end.
+   */
+  toValue?: AnimationValue;
+
+  /**
+   * Animation execution time
+   */
+  duration?: number;
+
+  /**
+   * Timeline mode of animation
+   */
+  mode?: AnimationMode;
+
+  /**
+   * Delay starting time
+   */
+  delay?: number;
+
+  /**
+   * Value type, leave it blank in most case, except use rotate/color related
+   * animation, set it to be 'deg' or 'color'.
+   */
+  valueType?: AnimationValueType;
+
+  /**
+   * Animation start position
+   */
+  direction?: AnimationDirection;
+
+  /**
+   * Animation interpolation type
+   */
+  timingFunction?: AnimationTimingFunction;
+
+  /**
+   * Animation repeat times, use 'loop' to be always repeating.
+   */
+  repeatCount?: number;
+  animation?: any;
+  inputRange?: any[];
+  outputRange?: any[];
+  animationId?: number;
+}
+
+export type AnimationList = { animationId?: number | undefined; follow?: boolean; }[];
