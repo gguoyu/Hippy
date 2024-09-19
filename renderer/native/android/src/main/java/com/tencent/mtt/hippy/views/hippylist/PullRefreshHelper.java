@@ -21,18 +21,18 @@ import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.OnTouchListener;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
-import android.widget.LinearLayout.LayoutParams;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.LayoutManager;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
+
+import com.tencent.mtt.hippy.views.waterfall.HippyWaterfallView;
+import com.tencent.renderer.node.PullHeaderRenderNode;
 import com.tencent.renderer.node.RenderNode;
 import com.tencent.mtt.hippy.views.hippylist.recyclerview.helper.AnimatorListenerBase;
 import com.tencent.mtt.hippy.views.refresh.HippyPullFooterView;
@@ -48,10 +48,8 @@ public abstract class PullRefreshHelper {
 
     public static final int DURATION = 200;
     public static final float PULL_RATIO = 2.4f;
-    protected float mLastPosition = -1;
-    protected float mStartPosition = -1;
     protected final HippyRecyclerView mRecyclerView;
-    protected final LinearLayout mContainer;
+    protected final PullRefreshContainer mContainer;
     protected final RenderNode mRenderNode;
     @Nullable
     protected View mItemView;
@@ -59,17 +57,48 @@ public abstract class PullRefreshHelper {
     protected ValueAnimator mAnimator;
     protected PullRefreshStatus mRefreshStatus = PullRefreshStatus.PULL_STATUS_FOLDED;
 
-    PullRefreshHelper(@NonNull HippyRecyclerView recyclerView, @NonNull RenderNode footerNode) {
+    PullRefreshHelper(@NonNull HippyRecyclerView recyclerView, @NonNull RenderNode node) {
         mRecyclerView = recyclerView;
-        mRenderNode = footerNode;
-        mContainer = new LinearLayout(recyclerView.getContext());
+        mRenderNode = node;
+        mContainer = new PullRefreshContainer(recyclerView.getContext(), node instanceof PullHeaderRenderNode);
+        mContainer.setId(node.getId());
     }
 
-    protected abstract void handleTouchMoveEvent(MotionEvent event);
+    protected abstract int handleDrag(int distance);
+
+    protected void endDrag() {
+        if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_FOLDED) {
+            return;
+        }
+        int nodeSize = getNodeSize();
+        int visibleSize = getVisibleSize();
+        if (visibleSize >= nodeSize) { // fully showing
+            if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_DRAGGING) {
+                mRefreshStatus = PullRefreshStatus.PULL_STATUS_REFRESHING;
+                sendReleasedEvent();
+            }
+            smoothResizeTo(getVisibleSize(), nodeSize, DURATION);
+        } else { // only partially showing
+            if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_DRAGGING) {
+                mRefreshStatus = PullRefreshStatus.PULL_STATUS_FOLDED;
+            }
+            if (visibleSize > 0) {
+                smoothResizeTo(getVisibleSize(), 0, DURATION);
+            }
+        }
+    }
+
+    protected int getNodeSize() {
+        return isVertical() ? mRenderNode.getHeight() : mRenderNode.getWidth();
+    }
 
     protected abstract void sendReleasedEvent();
 
     protected abstract void sendPullingEvent(int offset);
+
+    protected void sendCompatScrollEvent() {
+        mRecyclerView.getRecyclerViewEventHelper().checkSendOnScrollEvent();
+    }
 
     public void onDestroy() {
         mItemView = null;
@@ -80,61 +109,14 @@ public abstract class PullRefreshHelper {
     public void onRefreshCompleted() {
         if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_REFRESHING) {
             mRefreshStatus = PullRefreshStatus.PULL_STATUS_FOLDED;
-            setVisibleSize(0);
+            smoothResizeTo(getVisibleSize(), 0, DURATION);
         }
     }
 
-    public void enableRefresh() {
-        switch (mRefreshStatus) {
-            case PULL_STATUS_FOLDED:
-                int nodeSize = isVertical() ? mRenderNode.getHeight() : mRenderNode.getWidth();
-                setVisibleSize(nodeSize);
-                mRefreshStatus = PullRefreshStatus.PULL_STATUS_REFRESHING;
-                break;
-            case PULL_STATUS_DRAGGING:
-                mRefreshStatus = PullRefreshStatus.PULL_STATUS_REFRESHING;
-                break;
-            case PULL_STATUS_REFRESHING:
-            default:
-                break;
-        }
-    }
+    public abstract void enableRefresh();
 
     public View getView() {
         return mContainer;
-    }
-
-    public void onTouch(View v, MotionEvent event) {
-        if (mLastPosition == -1) {
-            mLastPosition = isVertical() ? event.getRawY() : event.getRawX();
-            mStartPosition = mLastPosition;
-        }
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-                mLastPosition = isVertical() ? event.getRawY() : event.getRawX();
-                mStartPosition = mLastPosition;
-                break;
-            case MotionEvent.ACTION_MOVE:
-                handleTouchMoveEvent(event);
-                break;
-            default:
-                mLastPosition = -1;
-                mStartPosition = -1;
-                int nodeSize = isVertical() ? mRenderNode.getHeight() : mRenderNode.getWidth();
-                if (getVisibleSize() >= nodeSize) {
-                    if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_DRAGGING) {
-                        mRefreshStatus = PullRefreshStatus.PULL_STATUS_REFRESHING;
-                        sendReleasedEvent();
-                    }
-                    smoothScrollTo(getVisibleSize(), nodeSize, DURATION);
-                } else if (mRefreshStatus == PullRefreshStatus.PULL_STATUS_DRAGGING) {
-                    mRefreshStatus = PullRefreshStatus.PULL_STATUS_FOLDED;
-                    if (getVisibleSize() > 0) {
-                        smoothScrollTo(getVisibleSize(), 0, DURATION);
-                    }
-                }
-                break;
-        }
     }
 
     protected void endAnimation() {
@@ -191,7 +173,13 @@ public abstract class PullRefreshHelper {
         mContainer.addView(itemView, lpChild);
         int width = isVertical ? MATCH_PARENT : 0;
         int height = isVertical ? 0 : MATCH_PARENT;
-        RecyclerView.LayoutParams lpContainer = new RecyclerView.LayoutParams(width, height);
+        RecyclerView.LayoutParams lpContainer;
+        if (mRecyclerView instanceof HippyWaterfallView) {
+            lpContainer = new StaggeredGridLayoutManager.LayoutParams(width, height);
+            ((StaggeredGridLayoutManager.LayoutParams) lpContainer).setFullSpan(true);
+        } else {
+            lpContainer = new RecyclerView.LayoutParams(width, height);
+        }
         mContainer.setLayoutParams(lpContainer);
     }
 
@@ -228,17 +216,13 @@ public abstract class PullRefreshHelper {
         }
         mContainer.setLayoutParams(layoutParams);
         mRecyclerView.dispatchLayout();
+        sendCompatScrollEvent();
     }
 
-    protected void smoothScrollTo(int fromValue, int toValue, int duration) {
+    protected void smoothResizeTo(int fromValue, int toValue, int duration) {
         endAnimation();
         mAnimator = ValueAnimator.ofInt(fromValue, toValue);
-        mAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                setVisibleSize((int) animation.getAnimatedValue());
-            }
-        });
+        mAnimator.addUpdateListener(animation -> setVisibleSize((int) animation.getAnimatedValue()));
         mAnimator.addListener(new AnimatorListenerBase() {
             @Override
             public void onAnimationEnd(Animator animation) {
@@ -255,10 +239,5 @@ public abstract class PullRefreshHelper {
             orientation = ((LinearLayoutManager) layoutManager).getOrientation();
         }
         return orientation == RecyclerView.VERTICAL;
-    }
-
-    protected int getTouchSlop() {
-        final ViewConfiguration vc = ViewConfiguration.get(mRecyclerView.getContext());
-        return vc.getScaledTouchSlop();
     }
 }

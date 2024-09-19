@@ -19,7 +19,7 @@
  */
 
 import { HippyWebEngineContext, HippyWebModule, HippyWebView } from '../base';
-import { HippyBaseView, HippyCallBack, InnerNodeTag, NodeData, UIProps } from '../types';
+import { HippyBaseView, HippyCallBack, InnerNodeTag, UIProps } from '../types';
 import { setElementStyle, warn, error, positionAssociate, zIndexAssociate } from '../common';
 import { AnimationModule } from './animation-module';
 
@@ -41,19 +41,23 @@ export class UIManagerModule extends HippyWebModule {
     ENV_STYLE_INIT_FLAG = true;
   }
 
-  public async createNode(rootViewId: any, data: Array<NodeData>) {
+  public async createNode(rootViewId: any, data: Array<HippyTypes.TranslatedNodes>) {
     this.createNodePreCheck(rootViewId);
     const updateViewIdSet = new Set();
     for (let c = 0; c < data.length; c++) {
-      const nodeItemData = data[c];
+      const [nodeItemData] = data[c];
       const { id, pId, index, props, name: tagName } = nodeItemData;
+      if (!tagName) {
+        warn(`create component failed, tagName is ${tagName}`);
+        continue;
+      }
       const view = mapView(this.context, tagName, id, pId);
       if (!view) {
         warn(`create component failed, not support the component ${tagName}`);
         continue;
       }
       try {
-        await this.viewInit(view, props, index);
+        await this.viewInit(view, props, index!);
       } catch (e) {
         error(e);
       }
@@ -75,19 +79,76 @@ export class UIManagerModule extends HippyWebModule {
     this.afterCreateAction = [];
   }
 
-  public async deleteNode(rootViewId: string, data: Array<{ id: number }>) {
+  public async deleteNode(rootViewId: string, data: Array<HippyTypes.TranslatedNodes>) {
     for (let i = 0; i < data.length; i++) {
-      const deleteItem = data[i];
+      const [deleteItem] = data[i];
       const deleteView = this.findViewById(deleteItem.id);
       await this.viewDelete(deleteView);
     }
   }
 
-  public updateNode(rootViewId: string, data: Array<{ id: number, props: UIProps }>) {
+  public updateNode(rootViewId: string, data: Array<HippyTypes.TranslatedNodes>) {
     for (let i = 0; i < data.length; i++) {
-      const updateItem = data[i];
+      const [updateItem] = data[i];
       const updateView = this.findViewById(updateItem.id);
-      this.viewUpdate(updateView, updateItem.props);
+      if (updateItem?.props) {
+        // only update node when it has props
+        this.viewUpdate(updateView, updateItem.props);
+      }
+    }
+  }
+
+  /**
+   * move native node
+   *
+   * @param rootViewId
+   * @param data
+   */
+  public async moveNode(rootViewId: string, data: Array<HippyTypes.TranslatedNodes>) {
+    for (let i = 0; i < data.length; i++) {
+      const [moveItem] = data[i];
+      const moveView = this.findViewById(moveItem.id);
+      if (moveView) {
+        // find new parent
+        const newParentView = this.findViewById(moveItem.pId);
+        // do not move when the node has same parent or new parent is null
+        if (newParentView && moveView?.pId !== moveItem.pId) {
+          // remove view from old parent
+          await this.viewDelete(moveView);
+        }
+      }
+
+      // create new view
+      await this.createNode(rootViewId, [data[i]]);
+    }
+  }
+
+  /**
+   * add event bind for native node
+   *
+   * @param id
+   * @param eventName
+   * @param callback
+   */
+  public addEventListener(id: number, eventName: string, callback: HippyCallBack) {
+    const view = this.findViewById(id);
+    if (view?.addEventListener) {
+      // add event listener
+      view.addEventListener(eventName, callback);
+    }
+  }
+
+  /**
+   * remove event bind for native node
+   *
+   * @param id
+   * @param eventName
+   */
+  public removeEventListener(id: number, eventName: string) {
+    const view = this.findViewById(id);
+    if (view?.removeEventListener) {
+      // remove event props
+      view.removeEventListener(eventName);
     }
   }
 
@@ -102,21 +163,45 @@ export class UIManagerModule extends HippyWebModule {
     viewFunctionInvoke(this.findViewById(nodeId), functionName, paramList, callBack);
   }
 
-  public measureInWindow(nodeId, callBack: HippyCallBack) {
+  public measureInWindow(params, callBack: HippyCallBack) {
+    const [nodeId] = params;
     if (!nodeId || !this.findViewById(nodeId)?.dom) {
       return;
     }
     const view = this.findViewById(nodeId);
     if (view!.dom) {
-      const rect = view!.dom.getBoundingClientRect();
+      const {
+        x,
+        y,
+        width,
+        height,
+        top,
+        left,
+        right,
+        bottom,
+      } = view!.dom.getBoundingClientRect();
       callBack.resolve({
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
         statusBarHeight: 0,
+        x,
+        y,
+        width,
+        height,
+        top,
+        left,
+        right,
+        bottom,
       });
     }
+  }
+
+  public measureInAppWindow(params, callBack: HippyCallBack) {
+    // same method with measureInWindow. compatible different platform
+    this.measureInWindow(params, callBack);
+  }
+
+  public getBoundingClientRect(params, callBack: HippyCallBack) {
+    // const [nodeId, options] = params; todo this method should handle refInfo
+    this.measureInWindow(params, callBack);
   }
 
   public findViewById(id: number): HippyBaseView | null {

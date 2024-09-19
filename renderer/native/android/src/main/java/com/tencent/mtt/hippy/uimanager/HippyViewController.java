@@ -33,7 +33,11 @@ import com.tencent.mtt.hippy.utils.DimensionsUtil;
 import com.tencent.mtt.hippy.utils.LogUtils;
 import com.tencent.mtt.hippy.utils.PixelUtil;
 import com.tencent.mtt.hippy.views.common.ClipChildrenView;
+import com.tencent.mtt.hippy.views.common.HippyNestedScrollComponent;
+import com.tencent.mtt.hippy.views.common.HippyNestedScrollComponent.Priority;
+import com.tencent.mtt.hippy.views.common.HippyNestedScrollHelper;
 import com.tencent.mtt.hippy.views.custom.HippyCustomPropsController;
+import com.tencent.mtt.hippy.views.view.HippyViewGroup;
 import com.tencent.renderer.NativeRenderContext;
 import com.tencent.renderer.Renderer;
 import com.tencent.renderer.NativeRender;
@@ -55,15 +59,17 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
     private static final String GET_BOUNDING_CLIENT_RECT = "getBoundingClientRect";
     public static final String KEY_REL_TO_CONTAINER = "relToContainer";
     public static final String KEY_ERR_MSG = "errMsg";
+    private static final int PERSPECTIVE_ARRAY_INVERTED_CAMERA_DISTANCE_INDEX = 2;
+    private static final float CAMERA_DISTANCE_NORMALIZATION_MULTIPLIER = (float) Math.sqrt(5);
     private static final MatrixUtil.MatrixDecompositionContext sMatrixDecompositionContext = new MatrixUtil.MatrixDecompositionContext();
     private static final double[] sTransformDecompositionArray = new double[16];
     private boolean bUserChangeFocus = false;
 
-    public View createView(@NonNull View rootView, int id, @NonNull Renderer renderer,
+    public View createView(@NonNull View rootView, int id, @Nullable Renderer renderer,
             @NonNull String className, @Nullable Map<String, Object> props) {
         View view = null;
         Context context = rootView.getContext();
-        Object object = renderer.getCustomViewCreator();
+        Object object = renderer != null ? renderer.getCustomViewCreator() : null;
         if (object instanceof HippyCustomViewCreator) {
             view = ((HippyCustomViewCreator) object)
                     .createCustomView(className, context, props);
@@ -82,6 +88,11 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
 
     public void onAfterUpdateProps(@NonNull T view) {
         view.invalidate();
+    }
+
+    @SuppressWarnings("unused")
+    protected void updateEvents(@NonNull T view, @Nullable Map<String, Object> events) {
+
     }
 
     protected void updateExtra(@NonNull View view, @Nullable Object object) {
@@ -308,6 +319,59 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
         view.setLayerType(useHWTexture ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE, null);
     }
 
+    @HippyControllerProps(name = HippyNestedScrollComponent.PROP_PRIORITY, defaultType =
+            HippyControllerProps.STRING, defaultString = HippyNestedScrollComponent.PRIORITY_SELF)
+    public void setNestedScrollPriority(T view, String priorityName) {
+        if (view instanceof HippyNestedScrollComponent) {
+            HippyNestedScrollComponent sc = (HippyNestedScrollComponent) view;
+            HippyNestedScrollComponent.Priority priority = HippyNestedScrollHelper.priorityOf(priorityName);
+            if (priority == Priority.NOT_SET) {
+                priority = Priority.SELF;
+            }
+            sc.setNestedScrollPriority(HippyNestedScrollComponent.DIRECTION_ALL, priority);
+        }
+    }
+
+    @HippyControllerProps(name = HippyNestedScrollComponent.PROP_LEFT_PRIORITY, defaultType =
+            HippyControllerProps.STRING)
+    public void setNestedScrollLeftPriority(T view, String priorityName) {
+        if (view instanceof HippyNestedScrollComponent) {
+            HippyNestedScrollComponent.Priority priority = HippyNestedScrollHelper.priorityOf(priorityName);
+            ((HippyNestedScrollComponent) view).setNestedScrollPriority(HippyNestedScrollComponent.DIRECTION_LEFT,
+                    priority);
+        }
+    }
+
+    @HippyControllerProps(name = HippyNestedScrollComponent.PROP_TOP_PRIORITY, defaultType =
+            HippyControllerProps.STRING)
+    public void setNestedScrollTopPriority(T view, String priorityName) {
+        if (view instanceof HippyNestedScrollComponent) {
+            HippyNestedScrollComponent.Priority priority = HippyNestedScrollHelper.priorityOf(priorityName);
+            ((HippyNestedScrollComponent) view).setNestedScrollPriority(HippyNestedScrollComponent.DIRECTION_TOP,
+                    priority);
+        }
+    }
+
+    @HippyControllerProps(name = HippyNestedScrollComponent.PROP_RIGHT_PRIORITY, defaultType =
+            HippyControllerProps.STRING)
+    public void setNestedScrollRightPriority(T view, String priorityName) {
+        if (view instanceof HippyNestedScrollComponent) {
+            HippyNestedScrollComponent.Priority priority = HippyNestedScrollHelper.priorityOf(priorityName);
+            ((HippyNestedScrollComponent) view).setNestedScrollPriority(HippyNestedScrollComponent.DIRECTION_RIGHT,
+                    priority);
+        }
+    }
+
+    @HippyControllerProps(name = HippyNestedScrollComponent.PROP_BOTTOM_PRIORITY, defaultType =
+            HippyControllerProps.STRING)
+    public void setNestedScrollBottomPriority(T view, String priorityName) {
+        if (view instanceof HippyNestedScrollComponent) {
+            HippyNestedScrollComponent.Priority priority = HippyNestedScrollHelper.priorityOf(priorityName);
+            ((HippyNestedScrollComponent) view).setNestedScrollPriority(HippyNestedScrollComponent.DIRECTION_BOTTOM,
+                    priority);
+        }
+    }
+
     @SuppressWarnings({"EmptyMethod", "unused"})
     @HippyControllerProps(name = NodeProps.CUSTOM_PROP)
     public void setCustomProp(T view, String methodName, Object props) {
@@ -351,6 +415,27 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
         view.setRotationY((float) sMatrixDecompositionContext.rotationDegrees[1]);
         view.setScaleX((float) sMatrixDecompositionContext.scale[0]);
         view.setScaleY((float) sMatrixDecompositionContext.scale[1]);
+
+        double[] perspectiveArray = sMatrixDecompositionContext.perspective;
+
+        if (perspectiveArray.length > PERSPECTIVE_ARRAY_INVERTED_CAMERA_DISTANCE_INDEX) {
+            float invertedCameraDistance = (float) perspectiveArray[PERSPECTIVE_ARRAY_INVERTED_CAMERA_DISTANCE_INDEX];
+            if (invertedCameraDistance == 0) {
+                // Default camera distance, before scale multiplier (1280)
+                invertedCameraDistance = 0.00078125f;
+            }
+            float cameraDistance = -1 / invertedCameraDistance;
+            float scale = PixelUtil.getDensity();
+
+            // The following converts the matrix's perspective to a camera distance
+            // such that the camera perspective looks the same on Android and iOS.
+            // The native Android implementation removed the screen density from the
+            // calculation, so squaring and a normalization value of
+            // sqrt(5) produces an exact replica with iOS.
+            // For more information, see https://github.com/facebook/react-native/pull/18302
+            float normalizedCameraDistance = scale * scale * cameraDistance * CAMERA_DISTANCE_NORMALIZATION_MULTIPLIER;
+            view.setCameraDistance(normalizedCameraDistance);
+        }
     }
 
     public static void resetTransform(View view) {
@@ -361,21 +446,21 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
         view.setRotationY(0);
         view.setScaleX(1);
         view.setScaleY(1);
+        view.setCameraDistance(0);
     }
 
     @SuppressWarnings("deprecation")
     @Deprecated
     public void dispatchFunction(@NonNull T view, @NonNull String functionName,
             @NonNull HippyArray params) {
-        // Stub method.
+        dispatchFunction(view, functionName, params.getInternalArray());
     }
 
     @SuppressWarnings("deprecation")
     @Deprecated
     public void dispatchFunction(@NonNull T view, @NonNull String functionName,
             @NonNull HippyArray params, @NonNull Promise promise) {
-        // Stub method.
-        DevtoolsUtil.dispatchDevtoolsFunction(view, functionName, params, promise);
+        dispatchFunction(view, functionName, params.getInternalArray(), promise);
     }
 
     @Nullable
@@ -444,6 +529,18 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
         parentView.removeView(childView);
     }
 
+    private boolean checkOverflowVisible(@NonNull View view) {
+        RenderNode node = RenderManager.getRenderNode(view);
+        if (node != null) {
+            Map<String, Object> props = node.getProps();
+            if (props != null) {
+                String overflow = MapUtils.getStringValue(props, NodeProps.OVERFLOW);
+                return (overflow != null && overflow.equals(NodeProps.VISIBLE));
+            }
+        }
+        return false;
+    }
+
     protected void addView(ViewGroup parentView, View view, int index) {
         int realIndex = index;
         if (realIndex > parentView.getChildCount()) {
@@ -451,7 +548,7 @@ public abstract class HippyViewController<T extends View & HippyViewBase> implem
         }
         try {
             parentView.addView(view, realIndex);
-            if (view instanceof ClipChildrenView) {
+            if (view instanceof ClipChildrenView && !checkOverflowVisible(parentView)) {
                 parentView.setClipChildren(true);
             }
         } catch (Exception e) {

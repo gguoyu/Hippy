@@ -63,6 +63,8 @@ public class HippyRecyclerViewBase extends RecyclerViewBase {
             LayoutManager layoutManager = getLayoutManager();
             if (layoutManager instanceof LinearLayoutManager) {
                 ((LinearLayoutManager) layoutManager).scrollToPositionWithOffset(position, offset);
+            } else if (layoutManager instanceof StaggeredGridLayoutManager) {
+                ((StaggeredGridLayoutManager) layoutManager).scrollToPositionWithOffset(position, offset);
             } else {
                 this.mLayout.scrollToPosition(position);
             }
@@ -79,6 +81,12 @@ public class HippyRecyclerViewBase extends RecyclerViewBase {
     @Override
     public void dispatchLayout() {
         if (!isBatching) {
+            LayoutManager layoutManager = getLayoutManager();
+            if (layoutManager instanceof HippyLinearLayoutManager) {
+                ((HippyLinearLayoutManager) layoutManager).resetCache();
+            } else if (layoutManager instanceof HippyStaggeredGridLayoutManager) {
+                ((HippyStaggeredGridLayoutManager) layoutManager).resetCache();
+            }
             super.dispatchLayout();
         }
         //由于上面屏蔽了super.onLayout,这里需要对齐框架的代码，把mFirstLayoutComplete该为true

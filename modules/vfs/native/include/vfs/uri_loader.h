@@ -38,9 +38,13 @@ inline namespace vfs {
 class UriLoader: public std::enable_shared_from_this<UriLoader> {
  public:
   using string_view = footstone::string_view;
+  using TimePoint = footstone::TimePoint;
   using WorkerManager = footstone::WorkerManager;
   using bytes = vfs::UriHandler::bytes;
   using RetCode = vfs::JobResponse::RetCode;
+  using RequestResultCallback = std::function<void(const string_view& uri,
+      const TimePoint& start, const TimePoint& end,
+      const int32_t ret_code, const string_view& error_msg)>;
 
   UriLoader();
   virtual ~UriLoader() = default;
@@ -73,6 +77,13 @@ class UriLoader: public std::enable_shared_from_this<UriLoader> {
 
   void Terminate();
 
+  void SetRequestResultCallback(const RequestResultCallback& cb) { on_request_result_ = cb; }
+
+ protected:
+  void DoRequestResultCallback(const string_view& uri,
+                               const TimePoint& start, const TimePoint& end,
+                               const int32_t ret_code, const string_view& error_msg);
+
  private:
   std::shared_ptr<UriHandler> GetNextHandler(std::list<std::shared_ptr<UriHandler>>::iterator& cur,
                                              const std::list<std::shared_ptr<UriHandler>>::iterator& end);
@@ -86,6 +97,8 @@ class UriLoader: public std::enable_shared_from_this<UriLoader> {
   std::list<std::shared_ptr<UriHandler>> default_handler_list_;
   std::list<std::shared_ptr<UriHandler>> interceptor_;
   std::mutex mutex_;
+
+  RequestResultCallback on_request_result_;
 };
 
 }

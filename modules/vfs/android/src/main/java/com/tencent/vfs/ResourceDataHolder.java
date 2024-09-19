@@ -16,6 +16,7 @@
 
 package com.tencent.vfs;
 
+import android.graphics.Bitmap;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -48,6 +49,8 @@ public class ResourceDataHolder extends RecycleObject {
     @Nullable
     public byte[] bytes;
     @Nullable
+    public Bitmap bitmap;
+    @Nullable
     public HashMap<String, String> requestHeaders;
     @Nullable
     public HashMap<String, String> requestParams;
@@ -59,6 +62,7 @@ public class ResourceDataHolder extends RecycleObject {
     public RequestFrom requestFrom;
     public int nativeRequestId;
     public int index = -1;
+    public long loadStartTime = 0;
     // The resource loading error code is defined by the processor itself,
     // a value other than 0 indicates failure, and a value of 0 indicates success.
     public int resultCode = -1;
@@ -103,9 +107,11 @@ public class ResourceDataHolder extends RecycleObject {
     public void recycle() {
         buffer = null;
         bytes = null;
+        bitmap = null;
         callback = null;
         errorMessage = null;
         processorTag = null;
+        loadStartTime = 0;
         index = -1;
         resultCode = -1;
         transferType = TransferType.NORMAL;

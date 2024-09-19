@@ -28,10 +28,14 @@
 #include "footstone/string_view.h"
 #include "driver/performance/performance_entry.h"
 #include "driver/performance/performance_resource_timing.h"
+#include "driver/performance/performance_navigation_timing.h"
+#include "driver/performance/performance_paint_timing.h"
 
 namespace hippy {
 inline namespace driver {
 inline namespace performance {
+
+extern const char* kPerfNavigationHippyInit;
 
 class Performance {
  public:
@@ -54,6 +58,10 @@ class Performance {
     return time_origin_;
   }
 
+  std::shared_ptr<PerformanceNavigationTiming> PerformanceNavigation(const string_view& name);
+  std::shared_ptr<PerformancePaintTiming> PerformancePaint(const PerformancePaintTiming::Type& type);
+  std::shared_ptr<PerformanceResourceTiming> PerformanceResource(const string_view& name);
+
   void Mark(const string_view& name);
   void ClearMarks(const string_view& name);
   void ClearMarks();
@@ -67,8 +75,8 @@ class Performance {
   void ClearResourceTimings();
   std::vector<std::shared_ptr<PerformanceEntry>> GetEntries(const PerformanceEntryFilterOptions& options);
   std::vector<std::shared_ptr<PerformanceEntry>> GetEntries();
-  std::shared_ptr<PerformanceEntry> GetEntriesByName(const string_view& name);
-  std::shared_ptr<PerformanceEntry> GetEntriesByName(const string_view& name, PerformanceEntry::Type type);
+  std::vector<std::shared_ptr<PerformanceEntry>> GetEntriesByName(const string_view& name);
+  std::vector<std::shared_ptr<PerformanceEntry>> GetEntriesByName(const string_view& name, PerformanceEntry::Type type);
   std::vector<std::shared_ptr<PerformanceEntry>> GetEntriesByType(PerformanceEntry::Type type);
   string_view ToJSON();
 

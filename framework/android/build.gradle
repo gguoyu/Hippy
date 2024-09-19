@@ -66,6 +66,7 @@ android {
         consumerProguardFiles 'proguard-rules.pro'
 
         buildConfigField("boolean", "ENABLE_SO_LOAD_EXTERNAL", ENABLE_SO_LOAD_EXTERNAL)
+        buildConfigField("boolean", "ENABLE_BUGLY_REPORT", ENABLE_BUGLY_REPORT)
         buildConfigField("String", "LIBRARY_VERSION", "String.valueOf(\"$VERSION_NAME\")")
 
         packagingOptions {
@@ -123,6 +124,7 @@ android {
                     arguments (
                             "-DCMAKE_BUILD_TYPE=Debug",
                             "-DMODULES=${getAllModules().join(';')}",
+                            "-DENABLE_INSPECTOR=$ENABLE_INSPECTOR",
                             *mergeCppDefinitions()
                     )
 
@@ -175,7 +177,11 @@ dependencies {
             }
         }
 
+
         embed project(path: ":${path.reverse().join('-')}", configuration: 'default')
+        if (it == 'renderer/native') {
+            embed project(path: ':renderer-native', configuration: 'default')
+        }
     }
     compileOnly project(path: ':renderer-native')
     //noinspection GradleDependency

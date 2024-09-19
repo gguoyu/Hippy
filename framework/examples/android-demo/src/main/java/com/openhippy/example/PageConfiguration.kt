@@ -16,22 +16,19 @@
 package com.openhippy.example
 
 import android.app.Dialog
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Rect
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
-import android.view.*
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tencent.mtt.hippy.HippyEngine
 import com.tencent.mtt.hippy.utils.LogUtils
@@ -59,6 +56,7 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
     private var hasRunOnCreate = false
     private var hippyEngineWrapper: HippyEngineWrapper? = null
     private var debugMode: Boolean = false
+    private var snapshotMode: Boolean = false
     private var debugServerHost: String = "localhost:38989"
     private var dialog: Dialog? = null
     private var driverMode: DriverMode = DriverMode.JS_REACT
@@ -71,7 +69,8 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
         pageConfigurationRoot = layoutInflater.inflate(R.layout.activity_page_configuration, null)
         pageConfigurationContainer =
             pageConfigurationRoot.findViewById(R.id.page_configuration_container)
-        pageConfigurationSetting = pageConfigurationRoot.findViewById(R.id.page_configuration_setting)
+        pageConfigurationSetting =
+            pageConfigurationRoot.findViewById(R.id.page_configuration_setting)
         pageConfigurationTitle =
             pageConfigurationRoot.findViewById(R.id.page_configuration_navigation_title)
 
@@ -88,9 +87,7 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
     }
 
     override fun onStop() {
-        hippyEngineWrapper?.let {
-            it.onStop()
-        }
+        hippyEngineWrapper?.onStop()
         super.onStop()
     }
 
@@ -121,7 +118,11 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
     }
 
     override fun onBackPressed() {
-        val goBack: () -> Unit = { buildSnapshot { moveTaskToBack(true) } }
+        val goBack: () -> Unit = {
+            buildSnapshot {
+                moveTaskToBack(true)
+            }
+        }
         hippyEngineWrapper?.apply {
             if (hippyEngine.onBackPressed(goBack)) {
                 return
@@ -135,13 +136,18 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
         if (rootView == null || currentEngineId == -1) {
             runnable.run()
         } else {
-            generateBitmapFromView(rootView, object : SnapshotBuildCallback {
-                override fun onSnapshotReady(bitmap: Bitmap?) {
-                    hippyEngineWrapper?.snapshot = bitmap
-                    (pageConfigurationContainer as ViewGroup).removeAllViews()
-                    runnable.run()
+            hippyEngineWrapper?.let {
+                if (!it.isDebugMode) {
+                    hippyEngineWrapper?.recordRenderNodeSnapshot()
                 }
-            })
+                it.buildRootViewScreenshot(this, object : GenerateScreenshotCallback {
+                    override fun onScreenshotBuildFinished() {
+                        (pageConfigurationContainer as ViewGroup).removeAllViews()
+                        runnable.run()
+                        hippyEngineWrapper = null
+                    }
+                })
+            }
         }
     }
 
@@ -150,7 +156,7 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
             pageConfigurationRoot.findViewById<View>(R.id.page_configuration_driver_setting)
         driverSettingText =
             pageConfigurationRoot.findViewById(R.id.page_configuration_driver_setting_title)
-        driverSettingButton.setOnClickListener { v ->
+        driverSettingButton.setOnClickListener {
             onDriverSettingClick()
         }
 
@@ -158,73 +164,44 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
             pageConfigurationRoot.findViewById<View>(R.id.page_configuration_renderer_setting)
         rendererSettingText =
             pageConfigurationRoot.findViewById(R.id.page_configuration_renderer_setting_title)
-        rendererSettingButton.setOnClickListener { v ->
+        rendererSettingButton.setOnClickListener {
             onRendererSettingClick()
         }
-
         val debugButton =
             pageConfigurationRoot.findViewById<View>(R.id.page_configuration_debug_setting_image)
-        val debugServerHost =
+        val debugServerHostParent =
             pageConfigurationRoot.findViewById<View>(R.id.page_configuration_debug_server_host)
-        debugButton.setOnClickListener { v ->
+        debugButton.setOnClickListener {
             if (debugMode) {
                 (debugButton as ImageView).setImageResource(R.drawable.page_config_debug_off_2x)
+                debugServerHostParent.visibility = View.GONE
                 debugMode = false
-                debugServerHost.visibility = View.GONE
             } else {
                 (debugButton as ImageView).setImageResource(R.drawable.page_config_debug_on_2x)
+                debugServerHostParent.visibility = View.VISIBLE
                 debugMode = true
-                debugServerHost.visibility = View.VISIBLE
             }
         }
-
+        val snapshotButton =
+            pageConfigurationRoot.findViewById<View>(R.id.page_configuration_snapshot_setting_image)
+        snapshotButton.setOnClickListener {
+            snapshotMode = if (snapshotMode) {
+                (snapshotButton as ImageView).setImageResource(R.drawable.page_config_debug_off_2x)
+                false
+            } else {
+                (snapshotButton as ImageView).setImageResource(R.drawable.page_config_debug_on_2x)
+                true
+            }
+        }
         val createButton =
             pageConfigurationRoot.findViewById<View>(R.id.page_configuration_create_image)
         createButton.setOnClickListener { v ->
-            onCreateClick()
-        }
-    }
-
-    private fun generateBitmapFromView(view: View, callback: SnapshotBuildCallback) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val temporalBitmap =
-                    Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                val location = IntArray(2)
-                view.getLocationInWindow(location)
-                val viewRectangle = Rect(
-                    location[0],
-                    location[1],
-                    location[0] + view.width,
-                    location[1] + view.height
-                )
-                val onPixelCopyListener: PixelCopy.OnPixelCopyFinishedListener =
-                    PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-                        if (copyResult == PixelCopy.SUCCESS) {
-                            callback.onSnapshotReady(temporalBitmap)
-                        } else {
-                            callback.onSnapshotReady(null)
-                        }
-                    }
-                PixelCopy.request(
-                    window,
-                    viewRectangle,
-                    temporalBitmap,
-                    onPixelCopyListener,
-                    Handler(Looper.getMainLooper())
-                )
-            } else {
-                val bitmap = Bitmap.createBitmap(
-                    view.width, view.height, Bitmap.Config.ARGB_8888
-                )
-                val canvas = Canvas(bitmap)
-                view.draw(canvas)
-                canvas.setBitmap(null)
-                callback.onSnapshotReady(bitmap)
+            val debugServerHostInput =
+                pageConfigurationRoot.findViewById<View>(R.id.page_configuration_debug_server_host_input)
+            (debugServerHostInput as AppCompatEditText).let {
+                debugServerHost = it.text.toString()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            callback.onSnapshotReady(null)
+            onCreateClick()
         }
     }
 
@@ -237,6 +214,7 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
                 driverMode,
                 renderMode,
                 debugMode,
+                snapshotMode,
                 debugServerHost
             )
             hippyEngineWrapper?.let {
@@ -253,8 +231,11 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
                 override fun onCreateRootView(hippyRootView: ViewGroup?) {
                     hippyRootView?.let {
                         (pageConfigurationContainer as ViewGroup).addView(hippyRootView)
-                        hippyEngineWrapper?.hippyRootView = hippyRootView
                     }
+                }
+
+                override fun onReplaySnapshotViewCompleted(snapshotView: ViewGroup) {
+                    (pageConfigurationContainer as ViewGroup).addView(snapshotView)
                 }
 
                 override fun onLoadModuleCompleted(
@@ -335,7 +316,12 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
             R.id.page_configuration_driver_vl -> {
                 val text = resources.getText(R.string.setting_not_available)
                 val span = SpannableString(text)
-                span.setSpan(ForegroundColorSpan(Color.BLACK), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                span.setSpan(
+                    ForegroundColorSpan(Color.BLACK),
+                    0,
+                    text.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 val toast: Toast =
                     Toast.makeText(
                         this,
@@ -348,7 +334,7 @@ class PageConfiguration : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    interface SnapshotBuildCallback {
-        fun onSnapshotReady(bitmap: Bitmap?)
+    interface GenerateScreenshotCallback {
+        fun onScreenshotBuildFinished()
     }
 }

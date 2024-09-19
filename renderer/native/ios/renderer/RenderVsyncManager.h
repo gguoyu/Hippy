@@ -2,7 +2,7 @@
  * iOS SDK
  *
  * Tencent is pleased to support the open source community by making
- * NativeRender available.
+ * Hippy available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company.
  * All rights reserved.
@@ -25,6 +25,8 @@
 @interface RenderVsyncManager : NSObject
 
 + (instancetype)sharedInstance;
+
+- (void)registerVsyncObserver:(dispatch_block_t)observer forKey:(NSString *)key;
 
 - (void)registerVsyncObserver:(dispatch_block_t)observer rate:(float)rate forKey:(NSString *)key;
 

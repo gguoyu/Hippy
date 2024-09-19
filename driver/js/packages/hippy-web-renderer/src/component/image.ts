@@ -156,23 +156,23 @@ export class Image extends HippyWebView<HTMLImageElement|HTMLElement> {
   }
 
   public onLoad(event) {
-    this.props[NodeProps.ON_LOAD] && this.context.sendUiEvent(this.id, NodeProps.ON_LOAD, event);
+    this.props[NodeProps.ON_LOAD] && this.dispatchEvent(NodeProps.ON_LOAD, event);
   }
 
   public onLoadStart(event) {
-    this.props[NodeProps.ON_LOAD_START] && this.context.sendUiEvent(this.id, NodeProps.ON_LOAD_START, event);
+    this.props[NodeProps.ON_LOAD_START] && this.dispatchEvent(NodeProps.ON_LOAD_START, event);
   }
 
   public onLoadEnd(event) {
-    this.props[NodeProps.ON_LOAD_END] && this.context.sendUiEvent(this.id, NodeProps.ON_LOAD_END, event);
+    this.props[NodeProps.ON_LOAD_END] && this.dispatchEvent(NodeProps.ON_LOAD_END, event);
   }
 
   public onError(event) {
-    this.props[NodeProps.ON_ERROR] && this.context.sendUiEvent(this.id, NodeProps.ON_ERROR, event);
+    this.props[NodeProps.ON_ERROR] && this.dispatchEvent(NodeProps.ON_ERROR, event);
   }
 
   public onProgress(event) {
-    this.props[NodeProps.ON_PROGRESS] && this.context.sendUiEvent(this.id, NodeProps.ON_PROGRESS, event);
+    this.props[NodeProps.ON_PROGRESS] && this.dispatchEvent(NodeProps.ON_PROGRESS, event);
   }
 
   public mounted() {
@@ -189,13 +189,28 @@ export class Image extends HippyWebView<HTMLImageElement|HTMLElement> {
 
   private handleLoad(_event: Event, loadUrl?: string) {
     this.isLoadSuccess = false;
+    let img: HTMLImageElement;
+    const eventParams = {
+      width: 0,
+      height: 0,
+      url: loadUrl ?? '',
+    };
+    const { currentTarget } = _event;
+
+    if (currentTarget) {
+      img = currentTarget as HTMLImageElement;
+      eventParams.width = img.width;
+      eventParams.height = img.height;
+    }
+
     if ((!loadUrl && this.renderImgDom?.src === this.src) || loadUrl === this.src) {
-      this.onLoad(null);
+      eventParams.url = this.src;
+      this.onLoad(eventParams);
       if (this.renderImgDom?.src !== this.src) {
         this.renderImgDom!.src = this.src;
       }
     }
-    this.onLoadEnd(null);
+    this.onLoadEnd(eventParams);
   }
 
   private buildTintDomContainer() {

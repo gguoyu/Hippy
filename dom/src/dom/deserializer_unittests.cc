@@ -1,3 +1,23 @@
+/*
+ * Tencent is pleased to support the open source community by making
+ * Hippy available.
+ *
+ * Copyright (C) 2022 THL A29 Limited, a Tencent company.
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define private public
 #define protected public
 
@@ -22,11 +42,12 @@ void CheckUint32(uint32_t value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kNumber);
-  EXPECT_TRUE(dom_value.GetNumberType() == footstone::value::HippyValue::NumberType::kUInt32);
-  EXPECT_TRUE(dom_value.ToUint32Checked() == value);
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kNumber);
+  EXPECT_TRUE(hippy_value.GetNumberType() == footstone::value::HippyValue::NumberType::kUInt32);
+  EXPECT_TRUE(hippy_value.ToUint32Checked() == value);
 }
 
 void CheckInt32(int32_t value) {
@@ -38,11 +59,12 @@ void CheckInt32(int32_t value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kNumber);
-  EXPECT_TRUE(dom_value.GetNumberType() == footstone::value::HippyValue::NumberType::kInt32);
-  EXPECT_TRUE(dom_value.ToInt32Checked() == value);
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kNumber);
+  EXPECT_TRUE(hippy_value.GetNumberType() == footstone::value::HippyValue::NumberType::kInt32);
+  EXPECT_TRUE(hippy_value.ToInt32Checked() == value);
 }
 
 void CheckDouble(double value) {
@@ -54,11 +76,12 @@ void CheckDouble(double value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kNumber);
-  EXPECT_TRUE(dom_value.GetNumberType() == footstone::value::HippyValue::NumberType::kDouble);
-  EXPECT_TRUE(dom_value.ToDoubleChecked() == value);
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kNumber);
+  EXPECT_TRUE(hippy_value.GetNumberType() == footstone::value::HippyValue::NumberType::kDouble);
+  EXPECT_TRUE(hippy_value.ToDoubleChecked() == value);
 }
 
 void CheckString(std::string value) {
@@ -70,11 +93,12 @@ void CheckString(std::string value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kString);
-  EXPECT_TRUE(dom_value.ToStringChecked() == value);
-  EXPECT_TRUE(dom_value.ToStringChecked().length() == value.length());
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kString);
+  EXPECT_TRUE(hippy_value.ToStringChecked() == value);
+  EXPECT_TRUE(hippy_value.ToStringChecked().length() == value.length());
 }
 
 void CheckMap(footstone::value::HippyValue::HippyValueObjectType value) {
@@ -86,13 +110,14 @@ void CheckMap(footstone::value::HippyValue::HippyValueObjectType value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kObject);
-  EXPECT_TRUE(dom_value.IsObject());
-  EXPECT_TRUE(dom_value.ToObjectChecked().size() == value.size());
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kObject);
+  EXPECT_TRUE(hippy_value.IsObject());
+  EXPECT_TRUE(hippy_value.ToObjectChecked().size() == value.size());
 
-  for (auto& v : dom_value.ToObjectChecked()) {
+  for (auto& v : hippy_value.ToObjectChecked()) {
     EXPECT_TRUE(value.find(v.first) != value.end());
     auto c = value.find(v.first);
     if (v.second.IsUInt32()) EXPECT_TRUE(v.second.ToUint32Checked() == c->second.ToUint32Checked());
@@ -103,7 +128,7 @@ void CheckMap(footstone::value::HippyValue::HippyValueObjectType value) {
   }
 }
 
-void CheckArray(footstone::value::HippyValue::DomValueArrayType value) {
+void CheckArray(footstone::value::HippyValue::HippyValueArrayType value) {
   footstone::value::Serializer serializer;
   serializer.WriteHeader();
   serializer.WriteDenseJSArray(value);
@@ -112,14 +137,15 @@ void CheckArray(footstone::value::HippyValue::DomValueArrayType value) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
 
-  footstone::value::HippyValue dom_value;
-  deserializer.ReadObject(dom_value);
-  EXPECT_TRUE(dom_value.GetType() == footstone::value::HippyValue::Type::kArray);
-  EXPECT_TRUE(dom_value.IsArray());
-  EXPECT_TRUE(dom_value.ToArrayChecked().size() == value.size());
+  footstone::value::HippyValue hippy_value;
+  deserializer.ReadObject(hippy_value);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
+  EXPECT_TRUE(hippy_value.GetType() == footstone::value::HippyValue::Type::kArray);
+  EXPECT_TRUE(hippy_value.IsArray());
+  EXPECT_TRUE(hippy_value.ToArrayChecked().size() == value.size());
 
-  for (size_t i = 0; i < dom_value.ToArrayChecked().size(); i++) {
-    auto v = dom_value.ToArrayChecked()[i];
+  for (size_t i = 0; i < hippy_value.ToArrayChecked().size(); i++) {
+    auto v = hippy_value.ToArrayChecked()[i];
     auto c = value[i];
     if (v.IsUInt32()) EXPECT_TRUE(v.ToUint32Checked() == c.ToUint32Checked());
     if (v.IsInt32()) EXPECT_TRUE(v.ToInt32Checked() == c.ToInt32Checked());
@@ -137,6 +163,7 @@ TEST(DeserializerTest, ReadHeader) {
   footstone::value::Deserializer deserializer(buffer.first, buffer.second);
   deserializer.ReadHeader();
   EXPECT_EQ(deserializer.version_, tdf::base::kLatestVersion);
+  footstone::value::SerializerHelper::DestroyBuffer(buffer);
 }
 
 TEST(DeserializerTest, Uint32) {
@@ -205,14 +232,14 @@ TEST(DeserializerTest, Object) {
   footstone::value::HippyValue u32(1);
   footstone::value::HippyValue d(1.0);
   footstone::value::HippyValue str("腾讯");
-  footstone::value::HippyValue::DomValueArrayType array1;
+  footstone::value::HippyValue::HippyValueArrayType array1;
   array1.push_back(i32);
   array1.push_back(u32);
   array1.push_back(d);
   array1.push_back(str);
   CheckArray(array1);
 
-  footstone::value::HippyValue::DomValueArrayType array2;
+  footstone::value::HippyValue::HippyValueArrayType array2;
   array2.push_back(i32);
   array2.push_back(u32);
   array2.push_back(d);

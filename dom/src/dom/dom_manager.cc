@@ -18,8 +18,6 @@
  * limitations under the License.
  */
 
-#define EXPERIMENT_LAYER_OPTIMIZATION
-
 #include "dom/dom_manager.h"
 
 #include <mutex>
@@ -51,14 +49,14 @@ using OneShotTimer = footstone::timer::OneShotTimer;
 using Serializer = footstone::value::Serializer;
 using Deserializer = footstone::value::Deserializer;
 
-using DomValueArrayType = footstone::value::HippyValue::DomValueArrayType;
+using HippyValueArrayType = footstone::value::HippyValue::HippyValueArrayType;
 
 void DomManager::SetRenderManager(const std::weak_ptr<RenderManager>& render_manager) {
-#ifdef EXPERIMENT_LAYER_OPTIMIZATION
+#ifdef HIPPY_EXPERIMENT_LAYER_OPTIMIZATION
   optimized_render_manager_ = std::make_shared<LayerOptimizedRenderManager>(render_manager.lock());
   render_manager_ = optimized_render_manager_;
 #else
-  render_manager_ = render_manager;
+  render_manager_ = render_manager.lock();
 #endif
 }
 
@@ -71,12 +69,15 @@ std::shared_ptr<DomNode> DomManager::GetNode(const std::weak_ptr<RootNode>& weak
 }
 
 void DomManager::CreateDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
-                                std::vector<std::shared_ptr<DomInfo>>&& nodes) {
+                                std::vector<std::shared_ptr<DomInfo>>&& nodes,
+                                bool needSortByIndex) {
   auto root_node = weak_root_node.lock();
   if (!root_node) {
     return;
   }
-  root_node->CreateDomNodes(std::move(nodes));
+  size_t create_size = nodes.size();
+  root_node->CreateDomNodes(std::move(nodes), needSortByIndex);
+  FOOTSTONE_DLOG(INFO) << "[Hippy Statistic] create node size = " << create_size << ", total node size = " << root_node->GetChildCount();
 }
 
 void DomManager::UpdateDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
@@ -85,7 +86,9 @@ void DomManager::UpdateDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
   if (!root_node) {
     return;
   }
+  size_t update_size = nodes.size();
   root_node->UpdateDomNodes(std::move(nodes));
+  FOOTSTONE_DLOG(INFO) << "[Hippy Statistic] update node size = " << update_size << ", total node size = " << root_node->GetChildCount();
 }
 
 void DomManager::MoveDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
@@ -94,7 +97,9 @@ void DomManager::MoveDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
   if (!root_node) {
     return;
   }
+  size_t move_size = nodes.size();
   root_node->MoveDomNodes(std::move(nodes));
+  FOOTSTONE_DLOG(INFO) << "[Hippy Statistic] move node size = " << move_size << ", total node size = " << root_node->GetChildCount();
 }
 
 void DomManager::UpdateAnimation(const std::weak_ptr<RootNode>& weak_root_node,
@@ -112,11 +117,13 @@ void DomManager::DeleteDomNodes(const std::weak_ptr<RootNode>& weak_root_node,
   if (!root_node) {
     return;
   }
+  size_t delete_size = nodes.size();
   root_node->DeleteDomNodes(std::move(nodes));
+  FOOTSTONE_DLOG(INFO) << "[Hippy Statistic] delete node size = " << delete_size << ", total node size = " << root_node->GetChildCount();
 }
 
 void DomManager::EndBatch(const std::weak_ptr<RootNode>& weak_root_node) {
-  auto render_manager = render_manager_.lock();
+  auto render_manager = render_manager_;
   FOOTSTONE_DCHECK(render_manager);
   if (!render_manager) {
     return;
@@ -125,6 +132,7 @@ void DomManager::EndBatch(const std::weak_ptr<RootNode>& weak_root_node) {
   if (!root_node) {
     return;
   }
+  FOOTSTONE_DLOG(INFO) << "[Hippy Statistic] total node size = " << root_node->GetChildCount();
   root_node->SyncWithRenderManager(render_manager);
 }
 
@@ -177,7 +185,7 @@ void DomManager::DoLayout(const std::weak_ptr<RootNode>& weak_root_node) {
   if (!root_node) {
     return;
   }
-  auto render_manager = render_manager_.lock();
+  auto render_manager = render_manager_;
   // check render_manager, measure text dependent render_manager
   FOOTSTONE_DCHECK(render_manager);
   if (!render_manager) {
@@ -209,13 +217,15 @@ DomManager::byte_string DomManager::GetSnapShot(const std::shared_ptr<RootNode>&
   if (!root_node) {
     return {};
   }
-  DomValueArrayType array;
+  HippyValueArrayType array;
   root_node->Traverse([&array](const std::shared_ptr<DomNode>& node) { array.emplace_back(node->Serialize()); });
   Serializer serializer;
   serializer.WriteHeader();
   serializer.WriteValue(HippyValue(array));
-  auto ret = serializer.Release();
-  return {reinterpret_cast<const char*>(ret.first), ret.second};
+  auto buffer_pair = serializer.Release();
+  byte_string bs =  {reinterpret_cast<const char*>(buffer_pair.first), buffer_pair.second};
+  footstone::value::SerializerHelper::DestroyBuffer(buffer_pair);
+  return bs;
 }
 
 bool DomManager::SetSnapShot(const std::shared_ptr<RootNode>& root_node, const byte_string& buffer) {
@@ -226,7 +236,7 @@ bool DomManager::SetSnapShot(const std::shared_ptr<RootNode>& root_node, const b
   if (!flag || !value.IsArray()) {
     return false;
   }
-  DomValueArrayType array;
+  HippyValueArrayType array;
   value.ToArray(array);
   if (array.empty()) {
     return false;
@@ -253,13 +263,26 @@ bool DomManager::SetSnapShot(const std::shared_ptr<RootNode>& root_node, const b
     if (dom_node->GetPid() == orig_root_id) {
       dom_node->SetPid(root_node->GetId());
     }
-    nodes.push_back(std::make_shared<DomInfo>(dom_node, nullptr));
+    nodes.push_back(std::make_shared<DomInfo>(dom_node, nullptr, nullptr));
   }
 
-  CreateDomNodes(root_node, std::move(nodes));
+  CreateDomNodes(root_node, std::move(nodes), false);
   EndBatch(root_node);
 
   return true;
+}
+
+void DomManager::RecordDomStartTimePoint() {
+  if (dom_start_time_point_.ToEpochDelta() == TimeDelta::Zero()) {
+    dom_start_time_point_ = footstone::TimePoint::SystemNow();
+  }
+}
+
+void DomManager::RecordDomEndTimePoint() {
+  if (dom_end_time_point_.ToEpochDelta() == TimeDelta::Zero()
+  && dom_start_time_point_.ToEpochDelta() != TimeDelta::Zero()) {
+    dom_end_time_point_ = footstone::TimePoint::SystemNow();
+  }
 }
 
 }  // namespace dom

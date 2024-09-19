@@ -34,47 +34,47 @@ CMakeLists.txt @ilikethese @etkmao
 /driver/vl/ @ilikethese @etkmao
 
 # framework: android
-/framework/android/ @siguangli
+/framework/android/ @siguangli @iPel
 /framework/android/**/src/main/cpp/ @etkmao @ilikethese
 
 # framework: ios
-/framework/ios/ @ozonelmy
+/framework/ios/ @wwwcg @ruifanyuan
 
 # framework: voltron
-/framework/voltron/ @lvfen @skindhu
+/framework/voltron/ @lvfen @henryjin0511
 
 # dom: others
 /dom/ @etkmao @ilikethese
 
 # renderer: native
-/renderer/native/android/ @siguangli
-/renderer/native/ios/ @ozonelmy
+/renderer/native/android/ @siguangli @iPel
+/renderer/native/ios/ @wwwcg @ruifanyuan
 
 # renderer: tdf
 /renderer/tdf/ @vimerzhao
-/renderer/tdf/android/ @siguangli
+/renderer/tdf/android/ @siguangli @iPel
 /renderer/tdf/android/**/src/main/cpp/ @ilikethese @etkmao
-/renderer/tdf/ios/ @ozonelmy
+/renderer/tdf/ios/ @wwwcg @ruifanyuan
 
 # renderer: voltron
-/renderer/voltron/ @lvfen @skindhu
+/renderer/voltron/ @lvfen @henryjin0511
 
 # module: vfs
 /modules/vfs/ @etkmao @ilikethese
-/modules/vfs/android/ @siguangli
+/modules/vfs/android/ @siguangli @iPel
 /modules/vfs/android/**/src/main/cpp/ @etkmao @ilikethese
-/modules/vfs/ios/ @ozonelmy
-/modules/vfs/voltron/ @lvfen @skindhu
+/modules/vfs/ios/ @wwwcg @ruifanyuan
+/modules/vfs/voltron/ @lvfen @henryjin0511
 
 # module: voltron
-/modules/voltron/ @lvfen @skindhu
+/modules/voltron/ @lvfen @henryjin0511
 
 # module: android
-/modules/android/ @siguangli
+/modules/android/ @siguangli @iPel
 /modules/android/jni/ @etkmao @ilikethese
 
 # module: ios
-/modules/ios/ @ozonelmy
+/modules/ios/ @wwwcg @ruifanyuan
 
 # module: footstone
 /modules/footstone/ @etkmao @ilikethese
@@ -86,27 +86,28 @@ CMakeLists.txt @ilikethese @etkmao
 /.github/ @zealotchen0
 
 # doc: example
-/framework/examples/android-demo/ @siguangli
+/framework/examples/android-demo/ @siguangli @iPel
 /framework/examples/android-demo/res/ @zealotchen0
-/framework/examples/ios-demo/ @ozonelmy
+/framework/examples/ios-demo/ @wwwcg @ruifanyuan
 /framework/examples/ios-demo/res/ @zealotchen0
+/framework/examples/voltron-demo/ @henryjin0511
 
 # doc: pages
 /*.md @zealotchen0
 /docs/ @zealotchen0
 
 # build: gradle
-/gradle.properties @siguangli
-/gradlew @siguangli
-/gradlew.bat @siguangli
-/settings.gradle @siguangli
-/build.gradle @siguangli
-/gradle/ @siguangli
+/gradle.properties @siguangli @iPel
+/gradlew @siguangli @iPel
+/gradlew.bat @siguangli @iPel
+/settings.gradle @siguangli @iPel
+/build.gradle @siguangli @iPel
+/gradle/ @siguangli @iPel
 
 # build: xcode
-/HippySDK.xcworkspace/ @ozonelmy
-/hippy.podspec @ozonelmy
-/xcodeinitscript.sh @ozonelmy
+/HippySDK.xcworkspace/ @wwwcg @ruifanyuan
+/hippy.podspec @wwwcg @ruifanyuan
+/xcodeinitscript.sh @wwwcg @ruifanyuan
 
 # build: config
 /buildconfig/ @ilikethese @etkmao
@@ -121,3 +122,6 @@ CMakeLists.txt @ilikethese @etkmao
 /.markdownlintrc.json @zealotchen0
 /PUBLISH.md @zealotchen0
 /README.md @zealotchen0
+
+# test
+/tests/ios/ @wwwcg @ruifanyuan

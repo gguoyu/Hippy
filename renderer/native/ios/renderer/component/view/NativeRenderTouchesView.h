@@ -2,7 +2,7 @@
  * iOS SDK
  *
  * Tencent is pleased to support the open source community by making
- * NativeRender available.
+ * Hippy available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company.
  * All rights reserved.
@@ -21,7 +21,9 @@
  */
 
 #import <UIKit/UIKit.h>
+
 #import "NativeRenderTouchesProtocol.h"
+#import "HippyConvert+NativeRender.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -31,6 +33,11 @@ NS_ASSUME_NONNULL_BEGIN
  * We need to override touchesBegan/touchesEnded/touchesCancelled/touchesMoved methods to handle coresponding event.
  */
 @interface NativeRenderTouchesView : UIView<NativeRenderTouchesProtocol>
+
+/**
+ * Used to control how touch events are processed.
+ */
+@property (nonatomic, assign) HippyPointerEvents pointerEvents;
 
 @end
 

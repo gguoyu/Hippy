@@ -26,16 +26,13 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ImageSpan;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-
 import com.tencent.mtt.hippy.annotation.HippyControllerProps;
 import com.tencent.mtt.hippy.dom.node.NodeProps;
 import com.tencent.mtt.hippy.utils.ContextHolder;
 import com.tencent.mtt.hippy.utils.PixelUtil;
 import com.tencent.renderer.NativeRender;
-
 import com.tencent.renderer.component.image.ImageDataSupplier;
 import com.tencent.renderer.component.image.ImageLoaderAdapter;
 import com.tencent.renderer.component.text.TextGestureSpan;
@@ -44,12 +41,23 @@ import java.util.List;
 
 public class ImageVirtualNode extends VirtualNode {
 
-    public static final String PROP_VERTICAL_ALIGNMENT = "verticalAlignment";
     protected int mWidth;
     protected int mHeight;
+    @Deprecated
     protected int mLeft;
+    @Deprecated
     protected int mTop;
+    @Deprecated
     protected int mVerticalAlignment = ImageSpan.ALIGN_BASELINE;
+    protected float mMargin = Float.NaN;
+    protected float mMarginVertical = Float.NaN;
+    protected float mMarginHorizontal = Float.NaN;
+    protected float mMarginLeft = Float.NaN;
+    protected float mMarginTop = Float.NaN;
+    protected float mMarginRight = Float.NaN;
+    protected float mMarginBottom = Float.NaN;
+    protected int mTintColor = Color.TRANSPARENT;
+    protected int mBackgroundColor = Color.TRANSPARENT;
     @Nullable
     protected TextImageSpan mImageSpan;
     @Nullable
@@ -73,16 +81,51 @@ public class ImageVirtualNode extends VirtualNode {
         return mHeight;
     }
 
+    @Deprecated
     public int getLeft() {
         return mLeft;
     }
 
+    @Deprecated
     public int getTop() {
         return mTop;
     }
 
+    /**
+     * @deprecated use {@link #getVerticalAlign} instead
+     */
+    @Deprecated
     public int getVerticalAlignment() {
         return mVerticalAlignment;
+    }
+
+    public int getMarginLeft() {
+        return getValue(mMarginLeft, mMarginHorizontal, mMargin);
+    }
+
+    public int getMarginTop() {
+        return getValue(mMarginTop, mMarginVertical, mMargin);
+    }
+
+    public int getMarginRight() {
+        return getValue(mMarginRight, mMarginHorizontal, mMargin);
+    }
+
+    public int getMarginBottom() {
+        return getValue(mMarginBottom, mMarginVertical, mMargin);
+    }
+
+    private int getValue(float primary, float secondary, float tertiary) {
+        if (!Float.isNaN(primary)) {
+            return Math.round(primary);
+        }
+        if (!Float.isNaN(secondary)) {
+            return Math.round(secondary);
+        }
+        if (!Float.isNaN(tertiary)) {
+            return Math.round(tertiary);
+        }
+        return 0;
     }
 
     @NonNull
@@ -92,14 +135,16 @@ public class ImageVirtualNode extends VirtualNode {
         if (mDefaultSource != null && imageLoader != null) {
             ImageDataSupplier supplier = imageLoader.fetchImageSync(mDefaultSource, null, mWidth,
                     mHeight);
-            Bitmap bitmap = supplier.getBitmap();
-            if (bitmap != null) {
-                Resources resources = ContextHolder.getAppContext().getResources();
-                drawable = new BitmapDrawable(resources, bitmap);
+            if (supplier != null) {
+                Bitmap bitmap = supplier.getBitmap();
+                if (bitmap != null) {
+                    Resources resources = ContextHolder.getAppContext().getResources();
+                    drawable = new BitmapDrawable(resources, bitmap);
+                }
             }
         }
         if (drawable == null) {
-            drawable = new ColorDrawable(Color.WHITE);
+            drawable = new ColorDrawable(Color.TRANSPARENT);
         }
         drawable.setBounds(0, 0, mWidth, mHeight);
         return new TextImageSpan(drawable, mUrl, this, mNativeRenderer);
@@ -113,9 +158,9 @@ public class ImageVirtualNode extends VirtualNode {
         builder.append(IMAGE_SPAN_TEXT);
         int end = start + IMAGE_SPAN_TEXT.length();
         ops.add(new SpanOperation(start, end, mImageSpan));
-        if (mGestureTypes != null && mGestureTypes.size() > 0) {
+        if (mEventTypes != null && mEventTypes.size() > 0) {
             TextGestureSpan span = new TextGestureSpan(mId);
-            span.addGestureTypes(mGestureTypes);
+            span.addGestureTypes(mEventTypes);
             ops.add(new SpanOperation(start, end, span));
         }
     }
@@ -134,6 +179,7 @@ public class ImageVirtualNode extends VirtualNode {
         markDirty();
     }
 
+    @Deprecated
     @SuppressWarnings("unused")
     @HippyControllerProps(name = NodeProps.LEFT, defaultType = HippyControllerProps.NUMBER)
     public void setLeft(float left) {
@@ -142,6 +188,7 @@ public class ImageVirtualNode extends VirtualNode {
         markDirty();
     }
 
+    @Deprecated
     @SuppressWarnings("unused")
     @HippyControllerProps(name = NodeProps.TOP, defaultType = HippyControllerProps.NUMBER)
     public void setTop(float top) {
@@ -151,15 +198,83 @@ public class ImageVirtualNode extends VirtualNode {
     }
 
     @SuppressWarnings("unused")
-    @HippyControllerProps(name = PROP_VERTICAL_ALIGNMENT, defaultType = HippyControllerProps.NUMBER,
+    @HippyControllerProps(name = NodeProps.MARGIN, defaultType = HippyControllerProps.NUMBER, defaultNumber = Float.NaN)
+    public void setMargin(float value) {
+        mMargin = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_VERTICAL, defaultType = HippyControllerProps.NUMBER, defaultNumber
+            = Float.NaN)
+    public void setMarginVertical(float value) {
+        mMarginVertical = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_HORIZONTAL, defaultType = HippyControllerProps.NUMBER,
+            defaultNumber = Float.NaN)
+    public void setMarginHorizontal(float value) {
+        mMarginHorizontal = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_LEFT, defaultType = HippyControllerProps.NUMBER, defaultNumber =
+            Float.NaN)
+    public void setMarginLeft(float value) {
+        mMarginLeft = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_TOP, defaultType = HippyControllerProps.NUMBER, defaultNumber =
+            Float.NaN)
+    public void setMarginTop(float value) {
+        mMarginTop = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_RIGHT, defaultType = HippyControllerProps.NUMBER, defaultNumber =
+            Float.NaN)
+    public void setMarginRight(float value) {
+        mMarginRight = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.MARGIN_BOTTOM, defaultType = HippyControllerProps.NUMBER, defaultNumber =
+            Float.NaN)
+    public void setMarginBottom(float value) {
+        mMarginBottom = Float.isNaN(value) ? Float.NaN : PixelUtil.dp2px(value);
+        markDirty();
+    }
+
+    /**
+     * @deprecated use {@link #setVerticalAlign} instead
+     */
+    @Deprecated
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.PROP_VERTICAL_ALIGNMENT, defaultType = HippyControllerProps.NUMBER,
             defaultNumber = ImageSpan.ALIGN_BASELINE)
     public void setVerticalAlignment(int alignment) {
         if (alignment != mVerticalAlignment) {
             mVerticalAlignment = alignment;
-            if (mImageSpan != null) {
-                mImageSpan.setVerticalAlignment(alignment);
-            }
+            markDirty();
         }
+    }
+
+    @SuppressWarnings("unused")
+    @HippyControllerProps(name = NodeProps.VERTICAL_ALIGN, defaultType = HippyControllerProps.STRING)
+    public void setVerticalAlign(String align) {
+        super.setVerticalAlign(align);
+    }
+
+    @HippyControllerProps(name = NodeProps.OPACITY, defaultType = HippyControllerProps.NUMBER, defaultNumber = 1f)
+    public void setOpacity(float opacity) {
+        super.setOpacity(opacity);
     }
 
     @SuppressWarnings("unused")
@@ -177,5 +292,29 @@ public class ImageVirtualNode extends VirtualNode {
                 mImageSpan.setUrl(src);
             }
         }
+    }
+
+    @HippyControllerProps(name = "tintColor", defaultType = HippyControllerProps.NUMBER)
+    public void setTintColor(int tintColor) {
+        mTintColor = tintColor;
+        if (mImageSpan != null) {
+            mImageSpan.setTintColor(tintColor);
+        }
+    }
+
+    public int getTintColor() {
+        return mTintColor;
+    }
+
+    @HippyControllerProps(name = NodeProps.BACKGROUND_COLOR, defaultType = HippyControllerProps.NUMBER)
+    public void setBackgroundColor(int color) {
+        mBackgroundColor = color;
+        if (mImageSpan != null) {
+            mImageSpan.setBackgroundColor(color);
+        }
+    }
+
+    public int getBackgroundColor() {
+        return mBackgroundColor;
     }
 }

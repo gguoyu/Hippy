@@ -23,6 +23,7 @@
 #include "connector/js_driver_jni.h"
 
 #include <android/asset_manager_jni.h>
+#include <condition_variable>
 
 #include "connector/bridge.h"
 #include "connector/convert_utils.h"
@@ -50,6 +51,8 @@
 #include "vfs/uri.h"
 #include "vfs/vfs_resource_holder.h"
 
+#include <unistd.h>
+
 #ifdef JS_V8
 #include "driver/vm/v8/v8_vm.h"
 #endif
@@ -68,7 +71,7 @@ inline namespace driver {
 REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
              "onCreate",
              "([BZZZLcom/openhippy/connector/NativeCallback;"
-             "JILcom/openhippy/connector/JsDriver$V8InitParams;II)I",
+             "JILcom/openhippy/connector/JsDriver$V8InitParams;IIZ)I",
              CreateJsDriver)
 
 REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
@@ -102,6 +105,26 @@ REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
              "(II)V",
              SetDomManager)
 
+REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
+             "onNativeInitEnd",
+             "(IJJ)V",
+             OnNativeInitEnd)
+
+REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
+             "onFirstPaintEnd",
+             "(IJ)V",
+             OnFirstPaintEnd)
+
+REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
+             "onFirstContentfulPaintEnd",
+             "(IJ)V",
+             OnFirstContentfulPaintEnd)
+
+REGISTER_JNI("com/openhippy/connector/JsDriver", // NOLINT(cert-err58-cpp)
+             "onResourceLoadEnd",
+             "(ILjava/lang/String;JJJLjava/lang/String;)V",
+             OnResourceLoadEnd)
+
 using string_view = footstone::stringview::string_view;
 using u8string = footstone::string_view::u8string;
 using StringViewUtils = footstone::stringview::StringViewUtils;
@@ -124,14 +147,141 @@ constexpr char kHippyCurDirKey[] = "__HIPPYCURDIR__";
 constexpr char kAssetSchema[] = "asset";
 
 static std::mutex holder_mutex;
+static std::mutex scope_mutex;
+// scope has two phases:
+// 1. create scope object.
+// 2. Initializing scope object in JS thread.
+// scope_initialized true means scope finished in js thread.
+// destroy js driver should wait after scope initialization.
+static std::unordered_map<uint32_t, bool> scope_initialized_map;
+static std::unordered_map<uint32_t, std::unique_ptr<std::condition_variable>> scope_cv_map;
 static std::unordered_map<void*, std::shared_ptr<Engine>> engine_holder;
 
 std::shared_ptr<Scope> GetScope(jint j_scope_id) {
   std::any scope_object;
   auto scope_id = footstone::checked_numeric_cast<jint, uint32_t>(j_scope_id);
   auto flag = hippy::global_data_holder.Find(scope_id, scope_object);
-  FOOTSTONE_CHECK(flag);
+  if (!flag) {
+    FOOTSTONE_LOG(ERROR) << "Can't find scope, scope id = " << scope_id;
+    return nullptr;
+  }
   return std::any_cast<std::shared_ptr<Scope>>(scope_object);
+}
+
+void OnNativeInitEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong startTime, jlong endTime) {
+  auto scope = GetScope(j_scope_id);
+  if (!scope) {
+    return;
+  }
+  auto engine = scope->GetEngine().lock();
+  if (!engine) {
+    return;
+  }
+  auto runner = engine->GetJsTaskRunner();
+  if (runner) {
+    std::weak_ptr<Scope> weak_scope = scope;
+    auto task = [weak_scope, startTime, endTime]() {
+      auto scope = weak_scope.lock();
+      if (scope) {
+        auto entry = scope->GetPerformance()->PerformanceNavigation("hippyInit");
+        entry->SetHippyNativeInitStart(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(startTime)));
+        entry->SetHippyNativeInitEnd(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(endTime)));
+      }
+    };
+    runner->PostTask(std::move(task));
+  }
+}
+
+void OnFirstPaintEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong time) {
+  auto scope = GetScope(j_scope_id);
+  if (!scope) {
+    return;
+  }
+  auto engine = scope->GetEngine().lock();
+  if (!engine) {
+    return;
+  }
+  auto runner = engine->GetJsTaskRunner();
+  if (runner) {
+    std::weak_ptr<Scope> weak_scope = scope;
+    auto task = [weak_scope, time]() {
+      auto scope = weak_scope.lock();
+      if (!scope) {
+        return;
+      }
+      auto dom_manager = scope->GetDomManager().lock();
+      if (!dom_manager) {
+        return;
+      }
+      auto entry = scope->GetPerformance()->PerformanceNavigation("hippyInit");
+      entry->SetHippyRunApplicationEnd(dom_manager->GetDomStartTimePoint());
+      entry->SetHippyDomStart(dom_manager->GetDomStartTimePoint());
+      entry->SetHippyDomEnd(dom_manager->GetDomEndTimePoint());
+      entry->SetHippyFirstFrameStart(dom_manager->GetDomEndTimePoint());
+      entry->SetHippyFirstFrameEnd(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(time)));
+    };
+    runner->PostTask(std::move(task));
+  }
+}
+
+void OnFirstContentfulPaintEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong time) {
+  auto scope = GetScope(j_scope_id);
+  if (!scope) {
+    return;
+  }
+  auto engine = scope->GetEngine().lock();
+  if (!engine) {
+    return;
+  }
+  auto runner = engine->GetJsTaskRunner();
+  if (runner) {
+    std::weak_ptr<Scope> weak_scope = scope;
+    auto task = [weak_scope, time]() {
+      auto scope = weak_scope.lock();
+      if (!scope) {
+        return;
+      }
+      auto entry = scope->GetPerformance()->PerformanceNavigation("hippyInit");
+      entry->SetHippyFirstContentfulPaintEnd(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(time)));
+    };
+    runner->PostTask(std::move(task));
+  }
+}
+
+void OnResourceLoadEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jstring j_uri,
+                       jlong j_start_time, jlong j_end_time, jlong j_ret_code, jstring j_error_msg) {
+  if (!j_uri) {
+    return;
+  }
+  auto uri = JniUtils::ToStrView(j_env, j_uri);
+  auto ret_code = static_cast<int32_t>(j_ret_code);
+  auto error_msg = j_error_msg ? JniUtils::ToStrView(j_env, j_error_msg) : string_view("");
+  auto scope = GetScope(j_scope_id);
+  if (!scope) {
+    return;
+  }
+  auto engine = scope->GetEngine().lock();
+  if (!engine) {
+    return;
+  }
+  auto runner = engine->GetJsTaskRunner();
+  if (runner) {
+    std::weak_ptr<Scope> weak_scope = scope;
+    auto task = [weak_scope, uri, j_start_time, j_end_time, ret_code, error_msg]() {
+      auto scope = weak_scope.lock();
+      if (scope) {
+        auto entry = scope->GetPerformance()->PerformanceResource(uri);
+        if (entry) {
+          entry->SetLoadSourceStart(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(j_start_time)));
+          entry->SetLoadSourceEnd(footstone::TimePoint::FromEpochDelta(footstone::TimeDelta::FromMilliseconds(j_end_time)));
+        }
+        if (ret_code != 0) {
+          scope->HandleUriLoaderError(uri, ret_code, error_msg);
+        }
+      }
+    };
+    runner->PostTask(std::move(task));
+  }
 }
 
 jint CreateJsDriver(JNIEnv* j_env,
@@ -145,7 +295,8 @@ jint CreateJsDriver(JNIEnv* j_env,
                     jint j_dom_manager_id,
                     jobject j_vm_init_param,
                     jint j_vfs_id,
-                    jint j_devtools_id) {
+                    jint j_devtools_id,
+                    jboolean j_is_reload) {
   FOOTSTONE_LOG(INFO) << "CreateJsDriver begin, j_single_thread_mode = "
                       << static_cast<uint32_t>(j_single_thread_mode)
                       << ", j_bridge_param_json = "
@@ -153,6 +304,10 @@ jint CreateJsDriver(JNIEnv* j_env,
                       << ", j_is_dev_module = "
                       << static_cast<uint32_t>(j_is_dev_module)
                       << ", j_group_id = " << j_group_id;
+
+  // perfromance start time
+  auto perf_start_time = footstone::TimePoint::SystemNow();
+
   auto global_config = JniUtils::JByteArrayToStrView(j_env, j_global_config);
   auto java_callback = std::make_shared<JavaRef>(j_env, j_callback);
 
@@ -196,15 +351,29 @@ jint CreateJsDriver(JNIEnv* j_env,
   auto dom_task_runner = dom_manager_object->GetTaskRunner();
   auto bridge = std::make_shared<Bridge>(j_env, j_object);
   auto scope_id = hippy::global_data_holder_key.fetch_add(1);
-  auto scope_initialized_callback = [
+  scope_initialized_map.insert({scope_id, false});
+  scope_cv_map.insert({scope_id, std::make_unique<std::condition_variable>()});
+
+  auto scope_initialized_callback = [perf_start_time,
       scope_id, java_callback, bridge, &holder = hippy::global_data_holder](std::shared_ptr<Scope> scope) {
     scope->SetBridge(bridge);
     holder.Insert(scope_id, scope);
+
+    // perfromance end time
+    auto entry = scope->GetPerformance()->PerformanceNavigation("hippyInit");
+    entry->SetHippyJsEngineInitStart(perf_start_time);
+    entry->SetHippyJsEngineInitEnd(footstone::TimePoint::SystemNow());
+
     FOOTSTONE_LOG(INFO) << "run scope cb";
     hippy::bridge::CallJavaMethod(java_callback->GetObj(), INIT_CB_STATE::SUCCESS);
+    {
+      std::unique_lock<std::mutex> lock(scope_mutex);
+      scope_initialized_map[scope_id] = true;
+      scope_cv_map[scope_id]->notify_all();
+    }
   };
   auto engine = JsDriverUtils::CreateEngineAndAsyncInitialize(
-      dom_task_runner, param, static_cast<int64_t>(j_group_id));
+      dom_task_runner, param, static_cast<int64_t>(j_group_id), static_cast<bool>(j_is_reload));
   {
     std::lock_guard<std::mutex> lock(holder_mutex);
     engine_holder[engine.get()] = engine;
@@ -225,6 +394,21 @@ void DestroyJsDriver(__unused JNIEnv* j_env,
                      jboolean j_is_reload,
                      jobject j_callback) {
   auto bridge_callback_object = std::make_shared<JavaRef>(j_env, j_callback);
+  {
+    std::unique_lock<std::mutex> lock(scope_mutex);
+    auto scope_id = footstone::checked_numeric_cast<jint, uint32_t>(j_scope_id);
+    if (!scope_initialized_map[scope_id]) {
+      auto iter = scope_cv_map.find(scope_id);
+      if (iter != scope_cv_map.end()) {
+        auto& cv = iter->second;
+        cv->wait(lock, [scope_id]{
+          return scope_initialized_map[scope_id];
+        });
+      }
+    }
+    scope_initialized_map.erase(scope_id);
+    scope_cv_map.erase(scope_id);
+  }
   auto scope = GetScope(j_scope_id);
   auto engine = scope->GetEngine().lock();
   FOOTSTONE_CHECK(engine);
@@ -238,14 +422,13 @@ void DestroyJsDriver(__unused JNIEnv* j_env,
   auto scope_id = footstone::checked_numeric_cast<jint, uint32_t>(j_scope_id);
   auto flag = hippy::global_data_holder.Erase(scope_id);
   FOOTSTONE_CHECK(flag);
-  JsDriverUtils::DestroyInstance(engine, scope, [bridge_callback_object](bool ret) {
+  JsDriverUtils::DestroyInstance(std::move(engine), std::move(scope), [bridge_callback_object](bool ret) {
       if (ret) {
         hippy::bridge::CallJavaMethod(bridge_callback_object->GetObj(),INIT_CB_STATE::SUCCESS);
       } else {
         hippy::bridge::CallJavaMethod(bridge_callback_object->GetObj(),INIT_CB_STATE::DESTROY_ERROR);
       }
     }, static_cast<bool>(j_is_reload));
-  scope = nullptr;
 }
 
 void LoadInstance(JNIEnv* j_env,
@@ -366,6 +549,7 @@ void SetRootNode(__unused JNIEnv* j_env,
                  jint j_scope_id,
                  jint j_root_id) {
   auto scope = GetScope(j_scope_id);
+  if (scope == nullptr) return;
   auto root_id = footstone::check::checked_numeric_cast<jint, uint32_t>(j_root_id);
   std::shared_ptr<RootNode> root_node;
   auto& persistent_map = RootNode::PersistentMap();

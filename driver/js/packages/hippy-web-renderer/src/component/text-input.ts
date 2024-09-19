@@ -73,8 +73,11 @@ export class TextInput extends HippyWebView<HTMLInputElement | HTMLTextAreaEleme
   public set defaultValue(value: string) {
     this.props[NodeProps.DEFAULT_VALUE] = value;
     // TODO to implement js logic
-    if (!this.value || this.value.length === 0) {
-      this.dom?.setAttribute('value', value);
+    if ((!this.value || this.value.length === 0) && this.dom) {
+      this.dom.value = value;
+      this.onChangeText({
+        text: this.dom.value,
+      });
     }
   }
 
@@ -205,30 +208,32 @@ export class TextInput extends HippyWebView<HTMLInputElement | HTMLTextAreaEleme
 
   public onBlur(event) {
     this.props[NodeProps.ON_BLUR]
-      && this.context.sendUiEvent(this.id, NodeProps.ON_BLUR, event);
+      && this.dispatchEvent(NodeProps.ON_BLUR, event);
   }
 
   public onChangeText(value) {
     this.props[NodeProps.ON_CHANGE_TEXT]
-      && this.context.sendUiEvent(this.id, NodeProps.ON_CHANGE_TEXT, value);
+      && this.dispatchEvent(NodeProps.ON_CHANGE_TEXT, value);
   }
 
   public onEndEditing(value) {
     this.props[NodeProps.ON_END_EDITING]
-      && this.context.sendUiEvent(this.id, NodeProps.ON_END_EDITING, value);
+      && this.dispatchEvent(NodeProps.ON_END_EDITING, value);
   }
 
   public onSelectionChange(value) {
     this.props[NodeProps.ON_SELECTION_CHANGE]
-      && this.context.sendUiEvent(this.id, NodeProps.ON_SELECTION_CHANGE, value);
+      && this.dispatchEvent(NodeProps.ON_SELECTION_CHANGE, value);
   }
 
   public blurTextInput() {
     this.dom?.blur();
+    this.props[NodeProps.IS_FOCUSED] = false;
   }
 
   public focusTextInput() {
     this.dom?.focus();
+    this.props[NodeProps.IS_FOCUSED] = true;
   }
 
   public clear() {
@@ -244,6 +249,7 @@ export class TextInput extends HippyWebView<HTMLInputElement | HTMLTextAreaEleme
 
   public hideInputMethod() {
     this.dom?.blur();
+    this.props[NodeProps.IS_FOCUSED] = false;
     // TODO to implement, page will scroll when keyboard show
   }
 
@@ -256,7 +262,16 @@ export class TextInput extends HippyWebView<HTMLInputElement | HTMLTextAreaEleme
 
   public showInputMethod() {
     this.dom?.focus();
+    this.props[NodeProps.IS_FOCUSED] = true;
   }
+
+  /**
+   * get input focus status
+   */
+  public isFocused(callback: HippyCallBack): void {
+    callback.resolve({ value: Boolean(this.props[NodeProps.IS_FOCUSED]) });
+  }
+
 
   private init() {
     document.addEventListener('selectionchange', this.handleSelection.bind(this));
@@ -310,7 +325,7 @@ export class TextInput extends HippyWebView<HTMLInputElement | HTMLTextAreaEleme
   }
 
   private handleInput() {
-    if (this.value.length === 0 && this.defaultValue) {
+    if (this.value?.length === 0 && this.defaultValue) {
       this.onChangeText({
         text: this.dom?.value,
       });

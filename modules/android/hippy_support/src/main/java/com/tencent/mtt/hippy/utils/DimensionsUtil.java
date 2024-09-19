@@ -169,12 +169,14 @@ public class DimensionsUtil {
         return STATUS_BAR_HEIGHT;
     }
 
-    public static HippyMap getDimensions(int windowWidth, int windowHeight, Context context,
-            boolean shouldUseScreenDisplay) {
+    public static HippyMap getDimensions(int ww, int wh, Context context) {
         if (context == null) {
             return null;
         }
-        DisplayMetrics windowDisplayMetrics = context.getResources().getDisplayMetrics();
+        DisplayMetrics windowDisplayMetrics = PixelUtil.getCustomDisplayMetrics();
+        if (windowDisplayMetrics == null) {
+            windowDisplayMetrics = context.getResources().getDisplayMetrics();
+        }
         DisplayMetrics screenDisplayMetrics = new DisplayMetrics();
         screenDisplayMetrics.setTo(windowDisplayMetrics);
         WindowManager windowManager = (WindowManager) context
@@ -184,47 +186,55 @@ public class DimensionsUtil {
 
         // construct param
         HippyMap dimensionMap = new HippyMap();
-        getStatusBarHeight();
-        if (windowWidth >= 0) {
-            windowWidth = Math.round(PixelUtil.px2dp(windowWidth));
-        }
-        if (windowHeight >= 0) {
-            windowHeight = Math.round(PixelUtil.px2dp(windowHeight));
-        }
+        int statusBarHeight = getStatusBarHeight();
         int navigationBarHeight = getNavigationBarHeight(context);
-        int statusBarHeight =
-                STATUS_BAR_HEIGHT > 0 ? Math.round(PixelUtil.px2dp(STATUS_BAR_HEIGHT)) : -1;
-        int screenDisplayWidth = Math.round(PixelUtil.px2dp(screenDisplayMetrics.widthPixels));
-        int screenDisplayHeight = Math.round(PixelUtil.px2dp(screenDisplayMetrics.heightPixels));
-        int windowDisplayWidth = Math.round(PixelUtil.px2dp(windowDisplayMetrics.widthPixels));
-        int windowDisplayHeight = Math.round(PixelUtil.px2dp(windowDisplayMetrics.heightPixels));
-        navigationBarHeight = Math.round(PixelUtil.px2dp(navigationBarHeight));
+
         HippyMap windowDisplayMetricsMap = new HippyMap();
-        if (shouldUseScreenDisplay) {
-            windowDisplayMetricsMap.pushInt("width", windowWidth >= 0 ? windowWidth : screenDisplayWidth);
-            windowDisplayMetricsMap.pushInt("height", windowHeight >= 0 ? windowHeight : screenDisplayHeight);
-            windowDisplayMetricsMap.pushDouble("scale", screenDisplayMetrics.density);
-            windowDisplayMetricsMap.pushDouble("fontScale", screenDisplayMetrics.scaledDensity);
-            windowDisplayMetricsMap.pushDouble("densityDpi", screenDisplayMetrics.densityDpi);
-        } else {
-            windowDisplayMetricsMap.pushInt("width", windowWidth >= 0 ? windowWidth : windowDisplayWidth);
-            windowDisplayMetricsMap.pushInt("height", windowHeight >= 0 ? windowHeight : windowDisplayHeight);
-            windowDisplayMetricsMap.pushDouble("scale", windowDisplayMetrics.density);
-            windowDisplayMetricsMap.pushDouble("fontScale", windowDisplayMetrics.scaledDensity);
-            windowDisplayMetricsMap.pushDouble("densityDpi", windowDisplayMetrics.densityDpi);
-        }
+        windowDisplayMetricsMap.pushDouble("width", ww >= 0 ? ww : windowDisplayMetrics.widthPixels);
+        windowDisplayMetricsMap.pushDouble("height", wh >= 0 ? wh : windowDisplayMetrics.heightPixels);
+        windowDisplayMetricsMap.pushDouble("scale", windowDisplayMetrics.density);
+        windowDisplayMetricsMap.pushDouble("fontScale", windowDisplayMetrics.scaledDensity);
+        windowDisplayMetricsMap.pushDouble("densityDpi", windowDisplayMetrics.densityDpi);
         windowDisplayMetricsMap.pushDouble("statusBarHeight", statusBarHeight);
         windowDisplayMetricsMap.pushDouble("navigationBarHeight", navigationBarHeight);
         dimensionMap.pushMap("windowPhysicalPixels", windowDisplayMetricsMap);
+
         HippyMap screenDisplayMetricsMap = new HippyMap();
-        screenDisplayMetricsMap.pushInt("width", screenDisplayWidth);
-        screenDisplayMetricsMap.pushInt("height", screenDisplayHeight);
+        screenDisplayMetricsMap.pushDouble("width", screenDisplayMetrics.widthPixels);
+        screenDisplayMetricsMap.pushDouble("height", screenDisplayMetrics.heightPixels);
         screenDisplayMetricsMap.pushDouble("scale", screenDisplayMetrics.density);
         screenDisplayMetricsMap.pushDouble("fontScale", screenDisplayMetrics.scaledDensity);
         screenDisplayMetricsMap.pushDouble("densityDpi", screenDisplayMetrics.densityDpi);
         screenDisplayMetricsMap.pushDouble("statusBarHeight", statusBarHeight);
         screenDisplayMetricsMap.pushDouble("navigationBarHeight", navigationBarHeight);
         dimensionMap.pushMap("screenPhysicalPixels", screenDisplayMetricsMap);
+
         return dimensionMap;
     }
+
+    public static void convertDimensionsToDp(HippyMap dimensionMap) {
+        if (dimensionMap != null) {
+            convertPhysicalPixelsToDp(dimensionMap.getMap("windowPhysicalPixels"));
+            convertPhysicalPixelsToDp(dimensionMap.getMap("screenPhysicalPixels"));
+        }
+    }
+
+    private static void convertPhysicalPixelsToDp(HippyMap map) {
+        if (map != null) {
+            double scale = map.getDouble("scale");
+            assert scale != 0;
+            divideByScale(map, "width", scale);
+            divideByScale(map, "height", scale);
+            divideByScale(map, "statusBarHeight", scale);
+            divideByScale(map, "navigationBarHeight", scale);
+        }
+    }
+
+    private static void divideByScale(HippyMap map, String key, double scale) {
+        double value = map.getDouble(key);
+        if (value > 0) {
+            map.pushDouble(key, value / scale);
+        }
+    }
+
 }

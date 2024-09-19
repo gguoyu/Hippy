@@ -83,6 +83,9 @@ void UriLoader::RequestUntrustedContent(const string_view& uri,
 }
 
 void UriLoader::RequestUntrustedContent(const std::shared_ptr<RequestJob>& request, std::shared_ptr<JobResponse> response) {
+  // performance start time
+  auto start_time = TimePoint::SystemNow();
+
   auto uri = request->GetUri();
   auto scheme = GetScheme(uri);
   std::list<std::shared_ptr<UriHandler>>::iterator cur_it;
@@ -104,11 +107,19 @@ void UriLoader::RequestUntrustedContent(const std::shared_ptr<RequestJob>& reque
   std::function<std::shared_ptr<UriHandler>()> next = [this, &cur_it, end_it]() -> std::shared_ptr<UriHandler> {
     return this->GetNextHandler(cur_it, end_it);
   };
-  (*cur_it)->RequestUntrustedContent(request, std::move(response), next);
+  (*cur_it)->RequestUntrustedContent(request, response, next);
+
+  // performance end time
+  auto end_time = TimePoint::SystemNow();
+  DoRequestResultCallback(request->GetUri(), start_time, end_time,
+                          static_cast<int32_t>(response->GetRetCode()), response->GetErrorMessage());
 }
 
 void UriLoader::RequestUntrustedContent(const std::shared_ptr<RequestJob>& request,
                                         const std::function<void(std::shared_ptr<JobResponse>)>& cb) {
+  // performance start time
+  auto start_time = TimePoint::SystemNow();
+
   auto uri = request->GetUri();
   auto scheme = GetScheme(uri);
   std::shared_ptr<std::list<std::shared_ptr<UriHandler>>::iterator> cur_it;
@@ -135,7 +146,21 @@ void UriLoader::RequestUntrustedContent(const std::shared_ptr<RequestJob>& reque
     }
     return self->GetNextHandler(*cur_it, *end_it);
   };
-  (**cur_it)->RequestUntrustedContent(request, cb, next);
+  auto new_cb = [WEAK_THIS, request, start_time, orig_cb = cb](std::shared_ptr<JobResponse> response) {
+    DEFINE_SELF(UriLoader)
+    if (!self) {
+      orig_cb(response);
+      return;
+    }
+
+    // performance end time
+    auto end_time = TimePoint::SystemNow();
+    self->DoRequestResultCallback(request->GetUri(), start_time, end_time,
+                                  static_cast<int32_t>(response->GetRetCode()), response->GetErrorMessage());
+
+    orig_cb(response);
+  };
+  (**cur_it)->RequestUntrustedContent(request, new_cb, next);
 }
 
 std::shared_ptr<UriHandler> UriLoader::GetNextHandler(std::list<std::shared_ptr<UriHandler>>::iterator& cur,
@@ -157,6 +182,14 @@ std::string UriLoader::GetScheme(const UriLoader::string_view& uri) {
     return {reinterpret_cast<const char*>(u8_uri.c_str()), pos};
   }
   return {};
+}
+
+void UriLoader::DoRequestResultCallback(const string_view& uri,
+                                        const TimePoint& start, const TimePoint& end,
+                                        const int32_t ret_code, const string_view& error_msg) {
+  if (on_request_result_ != nullptr) {
+    on_request_result_(uri, start, end, ret_code, error_msg);
+  }
 }
 
 }

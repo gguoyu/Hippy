@@ -40,7 +40,8 @@ jint CreateJsDriver(JNIEnv* j_env,
                     jint j_dom_manager_id,
                     jobject j_vm_init_param,
                     jint j_vfs_id,
-                    jint j_devtools_id);
+                    jint j_devtools_id,
+                    jboolean j_is_reload);
 
 void DestroyJsDriver(JNIEnv* j_env,
                      jobject j_object,
@@ -83,6 +84,14 @@ void SetDomManager(JNIEnv* j_env,
                    __unused jobject j_obj,
                    jint j_runtime_id,
                    jint j_dom_manager_id);
+
+void OnNativeInitEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong startTime, jlong endTime);
+
+void OnFirstPaintEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong time);
+
+void OnFirstContentfulPaintEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jlong time);
+
+void OnResourceLoadEnd(JNIEnv* j_env, jobject j_object, jint j_scope_id, jstring j_uri, jlong j_start_time, jlong j_end_time, jlong j_ret_code, jstring j_error_msg);
 
 }
 }

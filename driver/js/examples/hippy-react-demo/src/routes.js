@@ -18,7 +18,7 @@ export const Type = {
 export default [
   {
     path: '/Components',
-    name: 'Componemts',
+    name: 'Components',
     meta: {
       type: Type.TITLE,
       mapType: Type.COMPONENT,
@@ -28,14 +28,6 @@ export default [
     path: '/View',
     name: '<View> 组件',
     component: PAGE_LIST.View,
-    meta: {
-      type: Type.COMPONENT,
-    },
-  },
-  {
-    path: '/Clipboard',
-    name: '<Clipboard> 组件',
-    component: PAGE_LIST.Clipboard,
     meta: {
       type: Type.COMPONENT,
     },

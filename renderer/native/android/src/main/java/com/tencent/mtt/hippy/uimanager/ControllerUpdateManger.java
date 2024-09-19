@@ -16,6 +16,7 @@
 
 package com.tencent.mtt.hippy.uimanager;
 
+import android.graphics.Color;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -28,30 +29,49 @@ import com.tencent.mtt.hippy.views.custom.HippyCustomPropsController;
 import com.tencent.renderer.Renderer;
 import com.tencent.renderer.component.Component;
 import com.tencent.renderer.component.ComponentController;
+import com.tencent.renderer.component.FlatViewGroup;
 import com.tencent.renderer.component.image.ImageComponentController;
+import com.tencent.renderer.component.text.TextComponentController;
 import com.tencent.renderer.node.TextRenderNode;
 import com.tencent.renderer.node.TextVirtualNode;
+import com.tencent.renderer.utils.MapUtils;
 import com.tencent.renderer.utils.PropertyUtils;
 import com.tencent.renderer.utils.PropertyUtils.PropertyMethodHolder;
 import com.tencent.renderer.node.RenderNode;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class ControllerUpdateManger<T, G> {
+public class ControllerUpdateManger<T> {
 
     private static final Map<Class<?>, Map<String, PropertyMethodHolder>> sViewPropsMethodMap = new HashMap<>();
     private static final Map<String, PropertyMethodHolder> sComponentPropsMethodMap = new HashMap<>();
-    private static final Set<String> sTextPropsMap = new HashSet<>();
-    @NonNull
-    private final Renderer mRenderer;
+    private static final Set<String> sTextPropsSet = new HashSet<>();
+    private static final ArrayList<String> sRenderPropsList = new ArrayList<>();
+    private static final String[] sLayoutStyleList = {
+            NodeProps.WIDTH,
+            NodeProps.HEIGHT,
+            NodeProps.LEFT,
+            NodeProps.TOP,
+            NodeProps.VISIBILITY,
+            NodeProps.TRANSFORM,
+            NodeProps.OPACITY,
+            NodeProps.OVERFLOW
+    };
+    @Nullable
+    private final WeakReference<Renderer> mRendererWeakRef;
     @Nullable
     private ComponentController mComponentController;
     @Nullable
     private ImageComponentController mImageComponentController;
+    @Nullable
+    private TextComponentController mTextComponentController;
     @Nullable
     private T mCustomPropsController;
 
@@ -60,11 +80,20 @@ public class ControllerUpdateManger<T, G> {
     }
 
     public ControllerUpdateManger(@NonNull Renderer renderer) {
-        mRenderer = renderer;
+        mRendererWeakRef = new WeakReference<>(renderer);
+    }
+
+    void destroy() {
+
     }
 
     public void setCustomPropsController(T controller) {
         mCustomPropsController = controller;
+    }
+
+    @NonNull
+    public ArrayList<String> getPropsRegisterForRender() {
+        return sRenderPropsList;
     }
 
     private static void collectMethodHolder(@NonNull Class<?> cls,
@@ -75,6 +104,7 @@ public class ControllerUpdateManger<T, G> {
                     .getAnnotation(HippyControllerProps.class);
             if (controllerProps != null) {
                 String style = controllerProps.name();
+                sRenderPropsList.add(style);
                 PropertyMethodHolder propsMethodHolder = new PropertyMethodHolder();
                 propsMethodHolder.defaultNumber = controllerProps.defaultNumber();
                 propsMethodHolder.defaultType = controllerProps.defaultType();
@@ -94,14 +124,28 @@ public class ControllerUpdateManger<T, G> {
     private static void initComponentPropsMap() {
         collectMethodHolder(ComponentController.class, sComponentPropsMethodMap);
         collectMethodHolder(ImageComponentController.class, sComponentPropsMethodMap);
+        collectMethodHolder(TextComponentController.class, sComponentPropsMethodMap);
         Method[] methods = TextVirtualNode.class.getMethods();
         for (Method method : methods) {
             HippyControllerProps controllerProps = method
                     .getAnnotation(HippyControllerProps.class);
             if (controllerProps != null) {
-                sTextPropsMap.add(controllerProps.name());
+                String name = controllerProps.name();
+                if (!isComponentProps(name)) {
+                    sTextPropsSet.add(name);
+                }
+                sRenderPropsList.add(name);
             }
         }
+        Collections.addAll(sRenderPropsList, sLayoutStyleList);
+    }
+
+    private static boolean isComponentProps(String name) {
+        if (sComponentPropsMethodMap.containsKey(name)) {
+            return true;
+        }
+        // Special case: property "opacity" in TextVirtualNode also need to process in HippyViewController
+        return NodeProps.OPACITY.equals(name);
     }
 
     void findViewPropsMethod(Class<?> cls,
@@ -122,7 +166,8 @@ public class ControllerUpdateManger<T, G> {
     private void invokePropMethod(@NonNull Object obj, @NonNull Object arg1,
             Map<String, Object> props, String key, @NonNull PropertyMethodHolder methodHolder) {
         try {
-            if (props.get(key) == null) {
+            Object value = props.get(key);
+            if (value == null) {
                 switch (methodHolder.defaultType) {
                     case HippyControllerProps.BOOLEAN:
                         methodHolder.method.invoke(obj, arg1, methodHolder.defaultBoolean);
@@ -144,7 +189,6 @@ public class ControllerUpdateManger<T, G> {
                         break;
                 }
             } else {
-                Object value = props.get(key);
                 if (methodHolder.paramTypes == null) {
                     methodHolder.paramTypes = methodHolder.method.getGenericParameterTypes();
                 }
@@ -152,19 +196,17 @@ public class ControllerUpdateManger<T, G> {
                 methodHolder.method.invoke(obj, arg1, value);
             }
         } catch (Exception exception) {
-            mRenderer.handleRenderException(
-                    PropertyUtils.makePropertyConvertException(exception, key,
-                            methodHolder.method));
+            Renderer renderer = mRendererWeakRef.get();
+            if (renderer != null) {
+                renderer.handleRenderException(
+                        PropertyUtils.makePropertyConvertException(exception, key,
+                                methodHolder.method));
+            }
         }
     }
 
-    private void handleCustomProps(T t, G g, @NonNull String key,
-            @NonNull Map<String, Object> props) {
-        boolean hasCustomMethodHolder = false;
-        if (!(g instanceof View)) {
-            return;
-        }
-        Object customProps = props.get(key);
+    @Nullable
+    private PropertyMethodHolder getCustomPropsMethodHolder(@NonNull String key) {
         if (mCustomPropsController != null
                 && mCustomPropsController instanceof HippyCustomPropsController) {
             Class<?> cls = mCustomPropsController.getClass();
@@ -173,19 +215,25 @@ public class ControllerUpdateManger<T, G> {
                 methodHolderMap = new HashMap<>();
                 findViewPropsMethod(cls, methodHolderMap);
             }
-            PropertyMethodHolder methodHolder = methodHolderMap.get(key);
-            if (methodHolder != null) {
-                invokePropMethod(mCustomPropsController, g, props, key, methodHolder);
-                hasCustomMethodHolder = true;
-            }
+            return methodHolderMap.get(key);
         }
-        if (!hasCustomMethodHolder && t instanceof HippyViewController) {
-            //noinspection unchecked
-            ((HippyViewController) t).setCustomProp((View) g, key, customProps);
+        return null;
+    }
+
+    private void handleCustomProps(T t, @Nullable View view, @NonNull String key,
+            @NonNull Map<String, Object> props, @Nullable PropertyMethodHolder methodHolder) {
+        if (view != null) {
+            Object customProps = props.get(key);
+            if (methodHolder != null) {
+                invokePropMethod(mCustomPropsController, view, props, key, methodHolder);
+            } else if (t instanceof HippyViewController) {
+                //noinspection unchecked
+                ((HippyViewController) t).setCustomProp(view, key, customProps);
+            }
         }
     }
 
-    protected void updateProps(@NonNull RenderNode node, @NonNull T controller, @Nullable G view,
+    protected void updateProps(@NonNull RenderNode node, @NonNull T controller, @Nullable View view,
             @Nullable Map<String, Object> props, boolean skipComponentProps) {
         if (props == null || props.isEmpty()) {
             return;
@@ -198,22 +246,38 @@ public class ControllerUpdateManger<T, G> {
         }
         Set<String> keySet = props.keySet();
         for (String key : keySet) {
-            if (node instanceof TextRenderNode && sTextPropsMap.contains(key)) {
+            if (node instanceof TextRenderNode && sTextPropsSet.contains(key)) {
                 // The text related attributes have been processed in the build layout,
                 // so the following process no longer needs to be executed.
                 continue;
             }
             PropertyMethodHolder methodHolder = methodHolderMap.get(key);
             if (methodHolder != null) {
-                Object arg = (view == null) ? node.createView(true) : view;
-                if (arg != null) {
-                    invokePropMethod(controller, arg, props, key, methodHolder);
+                if (view == null) {
+                    view = node.createView(true);
+                }
+                if (view != null) {
+                    invokePropMethod(controller, view, props, key, methodHolder);
                 }
             } else {
-                if (key.equals(NodeProps.STYLE) && props.get(key) instanceof Map) {
-                    updateProps(node, controller, view, (Map) props.get(key), skipComponentProps);
+                // Background color is a property supported by both view and component, if the
+                // host view of a node has already been created, we need to set this property
+                // separately on the view, otherwise the background color setting for non
+                // flattened elements will not take effect.
+                if (key.equals(NodeProps.BACKGROUND_COLOR) && view != null
+                        && !(view instanceof FlatViewGroup)) {
+                    view.setBackgroundColor(
+                            MapUtils.getIntValue(props, NodeProps.BACKGROUND_COLOR,
+                                    Color.TRANSPARENT));
                 } else if (!handleComponentProps(node, key, props, skipComponentProps)) {
-                    handleCustomProps(controller, view, key, props);
+                    PropertyMethodHolder customMethodHolder = getCustomPropsMethodHolder(key);
+                    if (customMethodHolder != null && view == null) {
+                        // If the host has a custom attribute that needs to be processed, this element cannot be
+                        // flattened, otherwise, if the view is empty, custom attributes will not be passed through
+                        // to custom props controller.
+                        view = node.createView(true);
+                    }
+                    handleCustomProps(controller, view, key, props, customMethodHolder);
                 }
             }
         }
@@ -232,6 +296,12 @@ public class ControllerUpdateManger<T, G> {
                 mImageComponentController = new ImageComponentController();
             }
             return mImageComponentController;
+        }
+        if (cls == TextComponentController.class) {
+            if (mTextComponentController == null) {
+                mTextComponentController = new TextComponentController();
+            }
+            return mTextComponentController;
         }
         return null;
     }

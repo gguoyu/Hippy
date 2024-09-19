@@ -19,6 +19,8 @@
  */
 
 import { getGlobal } from '../get-global';
+import { SceneBuilder } from '../dom/scene-builder';
+import { Animation, AnimationSet } from '../dom/animation';
 import { Dimensions } from './dimensions';
 import { dealloc } from './event';
 import { nativeGlobal } from './native-global';
@@ -34,6 +36,11 @@ import { getTurboModule, turboPromise } from './turbo';
 import { dynamicLoad } from './dynamic-load';
 
 const global = getGlobal();
+
+if (typeof window !== 'undefined') {
+  // compatible global variable used
+  window.global = global as any;
+}
 
 // global
 global.Hippy = {} as any;
@@ -87,6 +94,13 @@ Hippy.asyncStorage = asyncStorage;
 Hippy.turboPromise = turboPromise;
 Hippy.document = document;
 Hippy.device.platform = platform();
+
+// scene builder for hippy 3.x
+Hippy.SceneBuilder = SceneBuilder;
+
+// animation module for hippy 3.x
+Hippy.Animation = Animation;
+Hippy.AnimationSet = AnimationSet;
 
 
 global.__localStorage = global.localStorage;

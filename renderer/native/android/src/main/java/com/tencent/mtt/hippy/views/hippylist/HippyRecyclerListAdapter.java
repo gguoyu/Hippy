@@ -17,32 +17,25 @@
 package com.tencent.mtt.hippy.views.hippylist;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
-import static com.tencent.renderer.node.RenderNode.FLAG_LAZY_LOAD;
 
-import android.view.MotionEvent;
-import android.view.View.OnTouchListener;
-import android.view.ViewParent;
+import android.view.View;
+import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.HippyItemTypeHelper;
 import androidx.recyclerview.widget.ItemLayoutParams;
 import androidx.recyclerview.widget.RecyclerView.Adapter;
 import androidx.recyclerview.widget.RecyclerView.LayoutParams;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import com.tencent.renderer.node.ListItemRenderNode;
-import com.tencent.renderer.node.PullFooterRenderNode;
-import com.tencent.renderer.node.PullHeaderRenderNode;
 import com.tencent.mtt.hippy.uimanager.RenderManager;
-import com.tencent.renderer.node.RenderNode;
 import com.tencent.mtt.hippy.utils.LogUtils;
+import com.tencent.mtt.hippy.views.hippylist.recyclerview.helper.skikcy.IStickyItemsProvider;
 import com.tencent.mtt.hippy.views.list.IRecycleItemTypeChange;
 import com.tencent.mtt.hippy.views.refresh.HippyPullFooterView;
 import com.tencent.mtt.hippy.views.refresh.HippyPullHeaderView;
-import com.tencent.mtt.hippy.views.hippylist.recyclerview.helper.skikcy.IStickyItemsProvider;
-import com.tencent.renderer.NativeRender;
-import com.tencent.renderer.NativeRenderException;
-import com.tencent.renderer.NativeRendererManager;
+import com.tencent.renderer.node.ListItemRenderNode;
+import com.tencent.renderer.node.PullFooterRenderNode;
+import com.tencent.renderer.node.PullHeaderRenderNode;
+import com.tencent.renderer.node.RenderNode;
+import com.tencent.renderer.node.WaterfallItemRenderNode;
 
 /**
  * Created on 2020/12/22.
@@ -50,7 +43,7 @@ import com.tencent.renderer.NativeRendererManager;
  * 对于特殊的renderNode，比如header和sticky的节点，我们进行了不同的处理。
  */
 public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Adapter<HippyRecyclerViewHolder>
-        implements IRecycleItemTypeChange, IStickyItemsProvider, ItemLayoutParams, OnTouchListener {
+        implements IRecycleItemTypeChange, IStickyItemsProvider, ItemLayoutParams {
 
     private static final String TAG = "HippyRecyclerListAdapter";
     private static final int STICK_ITEM_VIEW_TYPE_BASE = -100000;
@@ -59,12 +52,10 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
     protected int positionToCreateHolder;
     protected PullFooterRefreshHelper footerRefreshHelper;
     protected PullHeaderRefreshHelper headerRefreshHelper;
-    protected PreloadHelper preloadHelper;
 
     public HippyRecyclerListAdapter(HRCV hippyRecyclerView) {
         this.hippyRecyclerView = hippyRecyclerView;
         hippyItemTypeHelper = new HippyItemTypeHelper(hippyRecyclerView);
-        preloadHelper = new PreloadHelper(hippyRecyclerView);
     }
 
     /**
@@ -88,7 +79,8 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
             initFooterRefreshHelper(renderView, renderNode);
             return new HippyRecyclerViewHolder(footerRefreshHelper.getView(), renderNode);
         } else if (isStickyPosition(positionToCreateHolder)) {
-            return new HippyRecyclerViewHolder(getStickyContainer(parent, renderView), renderNode);
+            View stickyView = hippyRecyclerView.getStickyContainer(parent.getContext(), renderView);
+            return new HippyRecyclerViewHolder(stickyView, renderNode);
         }
         return new HippyRecyclerViewHolder(renderView, renderNode);
     }
@@ -102,14 +94,6 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
             attachedIds.append("_i_" + attachedView.getId());
         }
         return attachedIds.toString();
-    }
-
-    private FrameLayout getStickyContainer(ViewGroup parent, View renderView) {
-        FrameLayout container = new FrameLayout(parent.getContext());
-        if (renderView != null) {
-            container.addView(renderView, new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
-        }
-        return container;
     }
 
     @Override
@@ -141,9 +125,13 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
 
     @Override
     public void onViewAttachedToWindow(@NonNull HippyRecyclerViewHolder holder) {
-        if (holder.itemView != null) {
-            LogUtils.d(TAG, "onViewAttachedToWindow itemView id " + holder.itemView.getId());
-        }
+        LogUtils.d(TAG, "onViewAttachedToWindow itemView id " + holder.itemView.getId());
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull HippyRecyclerViewHolder holder) {
+        holder.bindNode.onViewHolderDetached();
+        super.onViewDetachedFromWindow(holder);
     }
 
     public void onFooterRefreshCompleted() {
@@ -187,6 +175,23 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
         }
         hippyRecyclerView.onLayoutOrientationChanged();
         hippyRecyclerView.enableOverPullIfNeeded();
+    }
+
+    public boolean hasPullHeader() {
+        return headerRefreshHelper != null;
+    }
+
+    public boolean hasBannerView() {
+        ListItemRenderNode node;
+        if (hasPullHeader()) {
+            node = getChildNodeByAdapterPosition(1);
+        } else {
+            node = getChildNodeByAdapterPosition(0);
+        }
+        if (node instanceof WaterfallItemRenderNode) {
+            return ((WaterfallItemRenderNode) node).isFullSpan();
+        }
+        return false;
     }
 
     private void initHeaderRefreshHelper(View itemView, RenderNode node) {
@@ -247,7 +252,7 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
             return 0;
         }
         if (node.shouldSticky()) {
-            return STICK_ITEM_VIEW_TYPE_BASE - position;
+            return STICK_ITEM_VIEW_TYPE_BASE - node.getId();
         }
         return node.getItemViewType();
     }
@@ -273,7 +278,10 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
     public ListItemRenderNode getChildNode(int position) {
         RenderNode parentNode = getParentNode();
         if (parentNode != null && position < parentNode.getChildCount() && position >= 0) {
-            return (ListItemRenderNode) parentNode.getChildAt(position);
+            RenderNode childNode = parentNode.getChildAt(position);
+            if (childNode instanceof ListItemRenderNode) {
+                return (ListItemRenderNode) childNode;
+            }
         }
         return null;
     }
@@ -314,63 +322,71 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
     }
 
     public int getItemHeight(int position) {
-        Integer itemHeight = getRenderNodeHeight(position);
-        if (itemHeight != null) {
-            return itemHeight;
+        return getRenderNodeHeight(position);
+    }
+
+    public int getItemHeight(View itemView) {
+        return getRenderNodeHeight(itemView);
+    }
+
+    private int getRenderNodeHeight(@NonNull ListItemRenderNode childNode) {
+        if (childNode.isPullHeader()) {
+            if (headerRefreshHelper != null) {
+                return headerRefreshHelper.getVisibleHeight();
+            }
+            return 0;
         }
-        return 0;
+        if (childNode.isPullFooter()) {
+            if (footerRefreshHelper != null) {
+                return footerRefreshHelper.getVisibleHeight();
+            }
+            return 0;
+        }
+        return childNode.getHeight();
+    }
+
+    public int getRenderNodeHeight(View itemView) {
+        RenderNode node = RenderManager.getRenderNode(itemView);
+        return (node instanceof ListItemRenderNode) ? getRenderNodeHeight((ListItemRenderNode) node) : 0;
     }
 
     public int getRenderNodeHeight(int position) {
-        ListItemRenderNode childNode = getChildNode(position);
-        if (childNode != null) {
-            if (childNode.isPullHeader()) {
-                if (headerRefreshHelper != null) {
-                    return headerRefreshHelper.getVisibleHeight();
-                }
-
-                return 0;
-            }
-            if (childNode.isPullFooter()) {
-                if (footerRefreshHelper != null) {
-                    return footerRefreshHelper.getVisibleHeight();
-                }
-
-                return 0;
-            }
-            return childNode.getHeight();
-        }
-        return 0;
+        ListItemRenderNode node = getChildNode(position);
+        return (node != null) ? getRenderNodeHeight(node) : 0;
     }
 
     public int getItemWidth(int position) {
-        Integer renderNodeWidth = getRenderNodeWidth(position);
-        if (renderNodeWidth != null) {
-            return renderNodeWidth;
+        return getRenderNodeWidth(position);
+    }
+
+    public int getItemWidth(View itemView) {
+        return getRenderNodeWidth(itemView);
+    }
+
+    private int getRenderNodeWidth(@NonNull ListItemRenderNode childNode) {
+        if (childNode.isPullHeader()) {
+            if (headerRefreshHelper != null) {
+                return headerRefreshHelper.getVisibleWidth();
+            }
+            return 0;
         }
-        return 0;
+        if (childNode.isPullFooter()) {
+            if (footerRefreshHelper != null) {
+                return footerRefreshHelper.getVisibleWidth();
+            }
+            return 0;
+        }
+        return childNode.getWidth();
+    }
+
+    public int getRenderNodeWidth(View itemView) {
+        RenderNode node = RenderManager.getRenderNode(itemView);
+        return (node instanceof ListItemRenderNode) ? getRenderNodeWidth((ListItemRenderNode) node) : 0;
     }
 
     public int getRenderNodeWidth(int position) {
-        ListItemRenderNode childNode = getChildNode(position);
-        if (childNode != null) {
-            if (childNode.isPullHeader()) {
-                if (headerRefreshHelper != null) {
-                    return headerRefreshHelper.getVisibleWidth();
-                }
-
-                return 0;
-            }
-            if (childNode.isPullFooter()) {
-                if (footerRefreshHelper != null) {
-                    return footerRefreshHelper.getVisibleWidth();
-                }
-
-                return 0;
-            }
-            return childNode.getWidth();
-        }
-        return 0;
+        ListItemRenderNode node = getChildNode(position);
+        return (node != null) ? getRenderNodeWidth(node) : 0;
     }
 
     protected RenderNode getParentNode() {
@@ -408,30 +424,29 @@ public class HippyRecyclerListAdapter<HRCV extends HippyRecyclerView> extends Ad
         return false;
     }
 
-    public PreloadHelper getPreloadHelper() {
-        return preloadHelper;
-    }
-
-    public void setPreloadItemNumber(int preloadItemNumber) {
-        preloadHelper.setPreloadItemNumber(preloadItemNumber);
-    }
-
     @Override
     public void getItemLayoutParams(int position, LayoutParams lp) {
-        if (lp == null) {
-            return;
+        if (lp != null) {
+            lp.height = getItemHeight(position);
+            lp.width = getItemWidth(position);
         }
-        lp.height = getItemHeight(position);
     }
 
     @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        if (headerRefreshHelper != null) {
-            headerRefreshHelper.onTouch(v, event);
+    public void getItemLayoutParams(ListItemRenderNode node, LayoutParams lp) {
+        if (lp != null || node != null) {
+            lp.height = getRenderNodeHeight(node);
+            lp.width = getRenderNodeWidth(node);
         }
-        if (footerRefreshHelper != null) {
-            footerRefreshHelper.onTouch(v, event);
-        }
-        return false;
     }
+
+    public boolean hasHeader() {
+        return getRenderNodeCount() > 0 && getChildNode(0).isPullHeader();
+    }
+
+    public boolean hasFooter() {
+        int count = getRenderNodeCount();
+        return count > 0 && getChildNode(count - 1).isPullFooter();
+    }
+
 }

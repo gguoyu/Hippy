@@ -22,6 +22,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:voltron/voltron.dart';
 
 import 'base_voltron_page.dart';
 
@@ -31,12 +33,14 @@ void main() {
   // debugPrintRebuildDirtyWidgets = true; // 记录每帧重建的 widget
   // debugProfilePaintsEnabled = true;
   if (Platform.isAndroid) {
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
-      statusBarColor: Colors.black,
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      systemNavigationBarColor: Color(0XFFE5E5E5),
     ));
   }
+
   runApp(MyApp());
 }
+
 class _MyWidgetInspector with WidgetInspectorService {
   static void init() {
     WidgetInspectorService.instance = _MyWidgetInspector();
@@ -89,11 +93,25 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   @override
+  void initState() {
+    super.initState();
+    setLibrary();
+  }
+
+  void setLibrary() async {
+    // final path = (await getApplicationDocumentsDirectory()).path;
+    // 测试业务动态load library
+    // VoltronJSLoaderManager.initCustomLibrary(path: '$path/libs/arm64-v8a/', name: 'voltron_core');
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0XFFE5E5E5),
       appBar: AppBar(
-        title: const Text('Demo'),
+        title: const Text(
+          'Demo',
+        ),
       ),
       body: Center(
         child: Column(
@@ -168,6 +186,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => BaseVoltronPage(
+                            title: 'Vue 2.0',
                             coreBundle: "assets/jsbundle/vue2/vendor.android.js",
                             indexBundle: "assets/jsbundle/vue2/index.android.js",
                           ),
@@ -183,6 +202,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => BaseVoltronPage(
+                            title: 'Vue 3.0',
                             coreBundle: "assets/jsbundle/vue3/vendor.android.js",
                             indexBundle: "assets/jsbundle/vue3/index.android.js",
                           ),
@@ -198,6 +218,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => BaseVoltronPage(
+                            title: 'React',
                             coreBundle: "assets/jsbundle/react/vendor.android.js",
                             indexBundle: "assets/jsbundle/react/index.android.js",
                           ),

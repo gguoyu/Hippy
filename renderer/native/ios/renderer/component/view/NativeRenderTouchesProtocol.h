@@ -2,7 +2,7 @@
  * iOS SDK
  *
  * Tencent is pleased to support the open source community by making
- * NativeRender available.
+ * Hippy available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company.
  * All rights reserved.
@@ -21,11 +21,14 @@
  */
 
 #import <Foundation/Foundation.h>
-#import "NativeRenderViewEventType.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef void(^OnTouchEventHandler)(CGPoint);
+typedef void(^OnTouchEventHandler)(CGPoint point,
+                                   BOOL canCapture,
+                                   BOOL canBubble,
+                                   BOOL canBePreventedInCapture,
+                                   BOOL canBePreventedInBubbling);
 
 /**
  * Protocol indicates Views' touches event
@@ -33,41 +36,35 @@ typedef void(^OnTouchEventHandler)(CGPoint);
  */
 @protocol NativeRenderTouchesProtocol <NSObject>
 
-/**
- * Add an event for a view
- * @param touchEvent event type
- * @param listener event handle block
- */
-- (void)addViewEvent:(NativeRenderViewEventType)touchEvent eventListener:(OnTouchEventHandler)listener;
+
 
 /**
- * Get event handle block with event type
- * @param eventType event type
- * @return event handle block for eventType
- */
-- (OnTouchEventHandler)eventListenerForEventType:(NativeRenderViewEventType)eventType;
-
-/**
- * Remove event handle block
- * @param touchEvent event type
- */
-- (void)removeViewEvent:(NativeRenderViewEventType)touchEvent;
-
-/**
- * Indicate event can be prevented in capturing process
+ * Indicate if event can be prevented in capturing process
  * @param name event name in std::string type
  * @return YES if event can be prevented in capturing process
  */
 - (BOOL)canBePreventedByInCapturing:(const char *)name;
 
 /**
- * Indicate event can be prevented in bubbling process
+ * Indicate if event can be prevented in bubbling process
  * @param name event name in std::string type
  * @return YES if event can be prevented in bubbling process
  */
 - (BOOL)canBePreventInBubbling:(const char *)name;
 
-- (void)resetAllEvents;
+/**
+ * Indicate if event can capture
+ * @param name event name
+ * @return YES if event can capture
+ */
+- (BOOL)canCapture:(const char *)name;
+
+/**
+ * Indicate if event can bubble
+ * @param name event name
+ * @return YES if event can bubble
+ */
+- (BOOL)canBubble:(const char *)name;
 
 @end
 
